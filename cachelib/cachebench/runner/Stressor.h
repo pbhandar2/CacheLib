@@ -55,6 +55,22 @@ struct ThroughputStats {
   void render(uint64_t, folly::UserCounters&) const;
 };
 
+struct BlockReplayStats {
+  uint64_t reqCount{0}; 
+  uint64_t reqReadCount{0};
+  uint64_t reqWriteCount{0};
+
+  // IO requested 
+  uint64_t reqBytes{0};
+  uint64_t reqReadBytes{0};
+  uint64_t reqWriteBytes{0};
+
+  // IO performed 
+  uint64_t ioBytes{0};
+  uint64_t ioReadBytes{0};
+  uint64_t ioWriteBytes{0};
+};
+
 // forward declaration for the workload generator.
 class GeneratorBase;
 

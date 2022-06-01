@@ -135,6 +135,11 @@ struct ReplayGeneratorConfig : public JSONConfig {
   // trace sample. E.g., additional ML features can be put here
   uint32_t numExtraFields{0};
 
+  std::vector<std::string> traceList{};
+  bool skipHeader{false};
+  uint64_t traceBlockSizeBytes{512};
+  uint64_t pageSizeBytes{4096};
+
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which
   // stats are aggregated by per field.

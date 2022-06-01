@@ -18,11 +18,13 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
+#include "cachelib/cachebench/runner/BlockCacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/ReplayGenerator.h"
+#include "cachelib/cachebench/workload/BlockTraceReplay.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
@@ -44,6 +46,7 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 
   return *this;
 }
+
 
 void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
@@ -131,6 +134,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
     return std::make_unique<PieceWiseReplayGenerator>(config);
   } else if (config.generator == "replay") {
     return std::make_unique<ReplayGenerator>(config);
+  } else if (config.generator == "multi-replay") {
+    return std::make_unique<BlockTraceReplay>(config);
   } else if (config.generator.empty() || config.generator == "workload") {
     // TODO: Remove the empty() check once we label workload-based configs
     // properly
@@ -162,10 +167,10 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
-      return std::make_unique<CacheStressor<LruAllocator>>(
+      return std::make_unique<BlockCacheStressor<LruAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     } else if (cacheConfig.allocator == "LRU2Q") {
-      return std::make_unique<CacheStressor<Lru2QAllocator>>(
+      return std::make_unique<BlockCacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
   }

@@ -1,0 +1,20 @@
+{
+    "cache_config": {
+      "cacheSizeMB": 100,
+      "allocSizes": [4136]
+    },
+    "test_config":
+      {
+        "enableLookaside": true,
+        "populateItem": true,
+        "generator": "multi-replay",
+        "numThreads": 1,
+        "replayGeneratorConfig": {
+            "traceList": ["/home/admin/CacheLib/cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
+            "skipHeader": false,
+            "traceBlockSizeBytes": 512,
+            "pageSizeBytes": 4096
+        }
+      }
+  
+  }
