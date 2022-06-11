@@ -10,11 +10,11 @@
         "generator": "multi-replay",
         "numThreads": 1,
         "replayGeneratorConfig": {
-            "traceList": ["../../cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
+            "traceList": ["/home/admin/csv_traces/w66.csv"],
             "skipHeader": false,
             "traceBlockSizeBytes": 512,
             "pageSizeBytes": 4096,
-            "diskFilePath": "../../cachelib/cachebench/test_configs/block_replay/disk.file"
+            "diskFilePath": "/home/admin/disk/disk.file"
         }
       }
   

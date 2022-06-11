@@ -23,6 +23,7 @@
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Config.h"
+#include "cachelib/common/PercentileStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -56,19 +57,41 @@ struct ThroughputStats {
 };
 
 struct BlockReplayStats {
+  // IO count 
   uint64_t reqCount{0}; 
-  uint64_t reqReadCount{0};
-  uint64_t reqWriteCount{0};
+  uint64_t readReqCount{0};
+  uint64_t writeReqCount{0};
 
-  // IO requested 
+  // IO size requested 
   uint64_t reqBytes{0};
-  uint64_t reqReadBytes{0};
-  uint64_t reqWriteBytes{0};
+  uint64_t readReqBytes{0};
+  uint64_t writeReqBytes{0};
 
-  // IO performed 
-  uint64_t ioBytes{0};
-  uint64_t ioReadBytes{0};
-  uint64_t ioWriteBytes{0};
+  uint64_t readPageCount{0};
+  uint64_t readPageHitCount{0};
+
+  uint64_t writePageCount{0};
+  uint64_t writePageHitCount{0};
+
+  uint64_t readBackingStoreReqCount{0};
+  uint64_t writeBackingStoreReqCount{0};
+
+  uint64_t readBackingStoreFailureCount{0};
+  uint64_t writeBackingStoreFailureCount{0};
+
+  uint64_t readBlockRequestFailure{0};
+  uint64_t writeBlockRequestFailure{0};
+
+  uint64_t loadPageFailure{0};
+
+  // operator overload to aggregate multiple instances of ThroughputStats, one
+  // from each  thread
+  BlockReplayStats& operator+=(const BlockReplayStats& other);
+
+  // convenience method to print the final throughput and hit ratio to stdout.
+  void render(uint64_t elapsedTimeNs, std::ostream& out) const;
+
+  void renderPercentile(std::ostream& out, folly::StringPiece describe, util::PercentileStats *stats) const;
 };
 
 // forward declaration for the workload generator.
@@ -110,6 +133,56 @@ class Stressor {
 
   // abort the run
   virtual void abort() { stopTest(); }
+
+ protected:
+  // check whether the load test should stop. e.g. user interrupt the
+  // cachebench.
+  bool shouldTestStop() { return stopped_.load(std::memory_order_acquire); }
+
+  // Called when stop request from user is captured. instead of stop the load
+  // test immediately, the method sets the state "stopped_" to true. Actual
+  // stop logic is in somewhere else.
+  void stopTest() { stopped_.store(true, std::memory_order_release); }
+
+ private:
+  // status that indicates if the runner has indicated the stress test to be
+  // stopped before completion.
+  std::atomic<bool> stopped_{false};
+};
+
+// Skeleton interface for a workload stressor. All stressors implement this
+// interface.
+class BlockCacheStressorBase {
+ public:
+  // create a stressor according to the passed in config and return through an
+  // opaque base class instance.
+  static std::unique_ptr<BlockCacheStressorBase> makeBlockCacheStressor(
+      const CacheConfig& cacheConfig, const StressorConfig& stressorConfig);
+
+  virtual ~BlockCacheStressorBase() {}
+
+  // report the stats from the cache  while the stress test is being run.
+  virtual Stats getCacheStats() const = 0;
+
+  // aggregate the throughput related stats at any given point in time.
+  virtual BlockReplayStats aggregateBlockReplayStats() const = 0;
+
+  // get the duration the test has run so far. If the test is finished, this
+  // is not expected to change.
+  virtual uint64_t getTestDurationNs() const = 0;
+
+  // start the stress run.
+  virtual void start() = 0;
+
+  // wait until the stress run finishes
+  virtual void finish() = 0;
+
+  // abort the run
+  virtual void abort() { stopTest(); }
+
+  virtual util::PercentileStats* getBackingStoreReadLatencyStat() const = 0;
+  virtual util::PercentileStats* getBackingStoreWriteLatencyStat() const = 0;
+
 
  protected:
   // check whether the load test should stop. e.g. user interrupt the

@@ -47,6 +47,85 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   return *this;
 }
 
+BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
+  reqCount += other.reqCount;
+  readReqCount += other.readReqCount;
+  writeReqCount += other.writeReqCount;
+
+  reqBytes += other.reqBytes;
+  readReqBytes += other.readReqBytes;
+  writeReqBytes += other.writeReqBytes;
+
+  readPageCount += other.readPageCount;
+  writePageCount += other.writePageCount;
+
+  readPageHitCount += other.readPageHitCount;
+  writePageHitCount += other.writePageHitCount;
+
+  readBackingStoreReqCount += other.readBackingStoreReqCount;
+  writeBackingStoreReqCount += other.writeBackingStoreReqCount;
+
+  readBackingStoreFailureCount += other.readBackingStoreFailureCount;
+  writeBackingStoreFailureCount += other.writeBackingStoreFailureCount;
+
+  readBlockRequestFailure += other.readBlockRequestFailure;
+  writeBlockRequestFailure += other.writeBlockRequestFailure;
+
+  loadPageFailure += other.loadPageFailure;
+
+  return *this;
+}
+
+void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
+
+  const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
+  out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
+
+  out << folly::sformat("IO Request Count: {} \n", reqCount);
+  out << folly::sformat("Total IO (Bytes): {} \n", reqBytes);
+
+  out << folly::sformat("Read Count: {} \n", readReqCount);
+  out << folly::sformat("Read IO (Bytes): {} \n", readReqBytes);
+
+  out << folly::sformat("Write Count: {} \n", writeReqCount);
+  out << folly::sformat("Write IO (Bytes): {} \n", writeReqBytes);
+
+  out << folly::sformat("Read Page Count: {} \n", readPageCount);
+  out << folly::sformat("Read Page Hit Count: {} \n", readPageHitCount);
+
+  out << folly::sformat("Write Page Count: {} \n", writePageCount);
+  out << folly::sformat("Write Page Hit Count: {} \n", writePageHitCount);
+
+  out << folly::sformat("Read Block Request Failure: {} \n", readBlockRequestFailure);
+  out << folly::sformat("Write Block Request Failure: {} \n", writeBlockRequestFailure);
+
+}
+
+void BlockReplayStats::renderPercentile(std::ostream& out, folly::StringPiece describe, util::PercentileStats *stats) const {
+  auto printLatencies =
+      [&out](folly::StringPiece cat,
+              const util::PercentileStats::Estimates& latency) {
+        auto fmtLatency = [&out, &cat](folly::StringPiece pct,
+                                        double val) {
+          out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
+                                val);
+        };
+
+        fmtLatency("p50", latency.p50);
+        fmtLatency("p90", latency.p90);
+        fmtLatency("p99", latency.p99);
+        fmtLatency("p999", latency.p999);
+        fmtLatency("p9999", latency.p9999);
+        fmtLatency("p99999", latency.p99999);
+        fmtLatency("p999999", latency.p999999);
+        fmtLatency("p100", latency.p100);
+      };
+
+  util::PercentileStats::Estimates est = stats->estimate();
+  printLatencies(describe, est);
+
+}
+
 
 void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
@@ -167,15 +246,23 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
-      return std::make_unique<BlockCacheStressor<LruAllocator>>(
+      return std::make_unique<CacheStressor<LruAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     } else if (cacheConfig.allocator == "LRU2Q") {
-      return std::make_unique<BlockCacheStressor<Lru2QAllocator>>(
+      return std::make_unique<CacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
   }
   throw std::invalid_argument("Invalid config");
 }
+
+std::unique_ptr<BlockCacheStressorBase> BlockCacheStressorBase::makeBlockCacheStressor(
+    const CacheConfig& cacheConfig, const StressorConfig& stressorConfig) {
+    auto generator = makeGenerator(stressorConfig);
+    return std::make_unique<BlockCacheStressor<LruAllocator>>(cacheConfig, stressorConfig, std::move(generator));
+}
+
+
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

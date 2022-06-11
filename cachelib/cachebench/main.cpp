@@ -22,7 +22,9 @@
 #include <thread>
 
 #include "cachelib/cachebench/runner/Runner.h"
+#include "cachelib/cachebench/runner/BlockRunner.h"
 #include "cachelib/cachebench/runner/Stressor.h"
+#include "cachelib/cachebench/runner/BlockCacheStressor.h"
 #include "cachelib/common/Utils.h"
 
 #ifdef CACHEBENCH_FB_ENV
@@ -57,7 +59,7 @@ DEFINE_int32(timeout_seconds,
              "Maximum allowed seconds for running test. 0 means no timeout");
 
 struct sigaction act;
-std::unique_ptr<facebook::cachelib::cachebench::Runner> runnerInstance;
+std::unique_ptr<facebook::cachelib::cachebench::BlockRunner> runnerInstance;
 std::unique_ptr<std::thread> stopperThread;
 
 void sigint_handler(int sig_num) {
@@ -143,8 +145,7 @@ int main(int argc, char** argv) {
 #endif
 
   try {
-    runnerInstance =
-        std::make_unique<facebook::cachelib::cachebench::Runner>(config);
+    runnerInstance = std::make_unique<facebook::cachelib::cachebench::BlockRunner>(config);
     setupSignalHandler();
     setupTimeoutHandler();
 

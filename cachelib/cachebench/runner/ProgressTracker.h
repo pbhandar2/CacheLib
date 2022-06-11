@@ -18,6 +18,7 @@
 #include <string>
 
 #include "cachelib/cachebench/runner/Stressor.h"
+#include "cachelib/cachebench/runner/BlockCacheStressor.h"
 #include "cachelib/common/PeriodicWorker.h"
 
 namespace facebook {
@@ -42,6 +43,27 @@ class ProgressTracker final : public cachelib::PeriodicWorker {
   std::ofstream statsFile_;  // optional output file stream
   Stats prevStats_; // previous snapshot of cache stats to perform deltas.
 };
+
+// independent worker that runs along side the stressor and tracks the
+// progress by emitting the stats to an output stream and/or file.
+class BlockReplayProgressTracker final : public cachelib::PeriodicWorker {
+ public:
+  // @param s                  the stressor that is being tracked
+  // @param detailedStatsFile  path to a file where detailed progress stats
+  //                           and cache stats are dumped periodically in
+  //                           addition to the stdout. If empty, this is
+  //                           disabled.
+  BlockReplayProgressTracker(const BlockCacheStressorBase& s, const std::string& detailedStatsFile);
+  ~BlockReplayProgressTracker() override;
+
+ private:
+  void work() override;
+
+  const BlockCacheStressorBase& stressor_; // stressor instance
+  std::ofstream statsFile_;  // optional output file stream
+  Stats prevStats_; // previous snapshot of cache stats to perform deltas.
+};
+
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

@@ -24,6 +24,7 @@ add_library (cachelib_cachebench
   ./runner/ProgressTracker.cpp
   ./runner/Runner.cpp
   ./runner/Stressor.cpp
+  ./runner/BlockRunner.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
