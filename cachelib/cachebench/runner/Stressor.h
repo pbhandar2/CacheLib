@@ -57,6 +57,7 @@ struct ThroughputStats {
 };
 
 struct BlockReplayStats {
+  
   // IO count 
   uint64_t reqCount{0}; 
   uint64_t readReqCount{0};
@@ -82,6 +83,7 @@ struct BlockReplayStats {
   uint64_t readBlockRequestFailure{0};
   uint64_t writeBlockRequestFailure{0};
 
+  uint64_t loadCount{0};
   uint64_t loadPageFailure{0};
 
   // operator overload to aggregate multiple instances of ThroughputStats, one

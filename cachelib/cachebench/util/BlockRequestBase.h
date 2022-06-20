@@ -24,6 +24,14 @@ enum class BlockOpType {
   kRemove
 };
 
+enum class BlockOpResultType {
+  kNop = 0,
+  kReadMiss,
+  kReadHit,
+  kLoadSuccess,
+  kLoadFailure
+};
+
 
 struct AsyncIORequest {
     AsyncIORequest(size_t len, uint64_t alignment) {
@@ -134,6 +142,10 @@ class BlockRequest {
 
         bool isRequestProcessed() {
             return requestProcessed_;
+        }
+
+        OpType getOp() {
+            return op_;
         }
 
         // get an empty spot in the list of AsyncIORequest objects 

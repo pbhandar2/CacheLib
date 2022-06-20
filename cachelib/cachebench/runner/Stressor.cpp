@@ -71,6 +71,7 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   readBlockRequestFailure += other.readBlockRequestFailure;
   writeBlockRequestFailure += other.writeBlockRequestFailure;
 
+  loadCount += other.loadCount;
   loadPageFailure += other.loadPageFailure;
 
   return *this;

@@ -39,7 +39,6 @@
 #include "cachelib/cachebench/workload/GeneratorBase.h"
 #include "cachelib/cachebench/util/BlockRequestBase.h"
 
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -48,10 +47,8 @@ constexpr uint32_t maxPendingBlockRequests = 4096;
 constexpr uint32_t maxConcurrentIO = 65536;
 constexpr uint32_t backingStoreAlignment = 512;
 
-// Implementation of stressor that uses a workload generator to stress an
-// instance of the cache.  All item's value in CacheStressor follows CacheValue
-// schema, which contains a few integers for sanity checks use. So it is invalid
-// to use item.getMemory and item.getSize APIs.
+// Implementation of block cache stressor that uses block trace replay 
+// to stress an instance of the cache and the backing storage device. 
 template <typename Allocator>
 class BlockCacheStressor : public BlockCacheStressorBase {
 	public:
@@ -90,7 +87,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             throw std::runtime_error(
                 folly::sformat("Error in io_setup, return: {}\n", ret));
         }
-
     }
 
 
@@ -188,9 +184,27 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    // load the given key to cache 
+    void loadKey(const std::string key, BlockReplayStats& stats) {
+        ++stats.loadCount;
+        auto it = cache_->allocate(0, 
+                            key, 
+                            config_.replayGeneratorConfig.pageSizeBytes, 
+                            0);
+
+        if (it == nullptr) {
+            ++stats.loadPageFailure;
+        } else {
+            populateItem(it);
+            cache_->insertOrReplace(it);
+        }
+    }
+
+
     // function called when an async IO completes
-    void asyncCompletionCallback(iocb* iocbPtr) {
+    void asyncCompletionCallback(iocb* iocbPtr, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> lock(asyncDataUpdateMutex_);
+
         std::map<iocb*, uint64_t>::iterator itr = blockRequestMap_.find(iocbPtr);
         if (itr != blockRequestMap_.end()) {  
             uint64_t index = itr->second;
@@ -198,8 +212,29 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 throw std::runtime_error(
                     folly::sformat("AsyncIoCompletionCallback -> Index: {}, Size: {}, Pointer: {} \n", index, blockRequestVec_.size(), iocbPtr));
             }
+
             blockRequestVec_.at(index)->ioCompleted(iocbPtr);  
             if (blockRequestVec_.at(index)->isRequestProcessed()) {
+                
+                for(uint64_t pageKey=blockRequestVec_.at(index)->getStartPage(); 
+                        pageKey <= blockRequestVec_.at(index)->getEndPage();
+                        pageKey++) {
+                            
+                    const std::string strkey = std::to_string(pageKey);
+                    if (blockRequestVec_.at(index)->getOp() == OpType::kGet) {
+                        auto it = cache_->find(strkey, AccessMode::kRead);
+                        if (it == nullptr) {
+                            loadKey(strkey, stats);
+                        } else {
+                            ++stats.readPageHitCount;
+                        }
+                    } else if (blockRequestVec_.at(index)->getOp() == OpType::kSet) {
+                        loadKey(strkey, stats);
+                    } else {
+                        throw std::runtime_error(
+                            folly::sformat("Operation not supported, only read and write \n"));
+                    }
+                }
                 delete blockRequestVec_.at(index);
                 blockRequestVec_.at(index) = nullptr;
             } 
@@ -230,7 +265,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     if (size != res) {
                         throw std::runtime_error(folly::sformat("IO Error: Size requested: {} Size returned: {} Res2: {}\n", size, res, events[eindex].res2));
                     }
-                    asyncCompletionCallback(retiocb);
+                    asyncCompletionCallback(retiocb, stats);
                 }
             }
             const bool all_terminated = std::all_of(std::begin(replayThreadTerminated_), 
@@ -265,7 +300,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec;
         for (uint64_t curPage=req->getStartPage(); curPage<=req->getEndPage(); curPage++) {
             const std::string key = std::to_string(curPage);
-            cache_->recordAccess(key);
             auto it = cache_->find(key, AccessMode::kRead);
             if (it == nullptr) {
                 if (size == 0) {
@@ -536,6 +570,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     io_context_t* ctx_;
     uint64_t pendingIOCount_{0};
+
     int backingStoreFileHandle_;
     std::mutex asyncDataUpdateMutex_;
 
@@ -546,6 +581,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     util::PercentileStats *backingStoreReadLatencyNs_ = new util::PercentileStats();
     util::PercentileStats *backingStoreWriteLatencyNs_ = new util::PercentileStats();
 
+    util::PercentileStats *blockReadLatencyNs_ = new util::PercentileStats();
+    util::PercentileStats *blockWriteLatencyNs_ = new util::PercentileStats();
+    
 };
 } // namespace cachebench
 } // namespace cachelib

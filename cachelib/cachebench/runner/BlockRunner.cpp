@@ -44,7 +44,7 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
     BlockReplayStats replayStats = stressor_->aggregateBlockReplayStats();
 
 
-    std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
+    // std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
     auto cacheStats = stressor_->getCacheStats();
     cacheStats.render(std::cout);
     // replayStats.render(durationNs, std::cout);
