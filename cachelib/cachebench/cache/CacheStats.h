@@ -280,6 +280,18 @@ struct Stats {
     }
   }
 
+  void blockRender(std::ostream& out) const {
+
+    auto totalMisses = getTotalMisses();
+    const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
+
+    out << folly::sformat("T1 page count: {}\n", numItems);
+    out << folly::sformat("T1 hit rate: {:6.2f}%\n", overallHitRatio);
+    out << folly::sformat("Cache get count: {}\n", numCacheGets);
+
+
+  }
+
   uint64_t getTotalMisses() const {
     return numNvmGets > 0 ? numNvmGetMiss : numCacheGetMiss;
   }

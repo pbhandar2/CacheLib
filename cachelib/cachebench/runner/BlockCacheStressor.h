@@ -1,19 +1,3 @@
-/*
- * Copyright (c) Facebook, Inc. and its affiliates.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #pragma once
 
 #include <folly/Random.h>
@@ -44,7 +28,7 @@ namespace cachelib {
 namespace cachebench {
 
 constexpr uint32_t maxPendingBlockRequests = 4096;
-constexpr uint32_t maxConcurrentIO = 65536;
+constexpr uint32_t maxConcurrentIO = 16384;
 constexpr uint32_t backingStoreAlignment = 512;
 
 // Implementation of block cache stressor that uses block trace replay 
@@ -204,7 +188,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     // function called when an async IO completes
     void asyncCompletionCallback(iocb* iocbPtr, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> lock(asyncDataUpdateMutex_);
-
         std::map<iocb*, uint64_t>::iterator itr = blockRequestMap_.find(iocbPtr);
         if (itr != blockRequestMap_.end()) {  
             uint64_t index = itr->second;
@@ -215,25 +198,32 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
             blockRequestVec_.at(index)->ioCompleted(iocbPtr);  
             if (blockRequestVec_.at(index)->isRequestProcessed()) {
-                
-                for(uint64_t pageKey=blockRequestVec_.at(index)->getStartPage(); 
-                        pageKey <= blockRequestVec_.at(index)->getEndPage();
+                uint64_t startPage = blockRequestVec_.at(index)->getStartPage();
+                uint64_t endPage = blockRequestVec_.at(index)->getEndPage();
+                for(uint64_t pageKey = startPage; 
+                        pageKey <= endPage;
                         pageKey++) {
-                            
+                    
+                    stats.totalIOProcessed += config_.replayGeneratorConfig.pageSizeBytes;
                     const std::string strkey = std::to_string(pageKey);
                     if (blockRequestVec_.at(index)->getOp() == OpType::kGet) {
-                        auto it = cache_->find(strkey, AccessMode::kRead);
-                        if (it == nullptr) {
+                        if (blockRequestVec_.at(index)->checkKeyMiss(pageKey)) {
+                            std::cout << "LOADING KEYYYYY\n";
                             loadKey(strkey, stats);
-                        } else {
+                        }
+                        else {
+                            std::cout << "RECORDDDD\n";
                             ++stats.readPageHitCount;
+                            cache_->recordAccess(strkey);
                         }
                     } else if (blockRequestVec_.at(index)->getOp() == OpType::kSet) {
+                        stats.writePageCount++;
                         loadKey(strkey, stats);
                     } else {
                         throw std::runtime_error(
                             folly::sformat("Operation not supported, only read and write \n"));
                     }
+                    
                 }
                 delete blockRequestVec_.at(index);
                 blockRequestVec_.at(index) = nullptr;
@@ -294,28 +284,45 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
 
     // get cache misses for a block request 
-    std::vector<std::tuple<uint64_t, uint64_t>> getCacheMiss(BlockRequest* req) {
+    std::vector<std::tuple<uint64_t, uint64_t>> getCacheMiss(BlockRequest* req, BlockReplayStats& stats) {
+
         uint64_t size = 0;
         uint64_t offset = 0;
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec;
-        for (uint64_t curPage=req->getStartPage(); curPage<=req->getEndPage(); curPage++) {
+        for (uint64_t curPage=req->getStartPage(); 
+                curPage<=req->getEndPage(); 
+                curPage++) {
+
+            stats.readPageCount++;
             const std::string key = std::to_string(curPage);
             auto it = cache_->find(key, AccessMode::kRead);
             if (it == nullptr) {
-                if (size == 0) {
+                // read cache miss detected 
+                req->addMissKey(curPage);
+
+                // if no previous read cache miss detected 
+                // set the starting offset
+                if (size == 0) 
                     offset = curPage*config_.replayGeneratorConfig.pageSizeBytes;
-                }
+
+                // track the size of contigous cache misses 
                 size += config_.replayGeneratorConfig.pageSizeBytes;
             } else {
+                // there is a cache hit 
+                // if there were previous misses not tracked yet 
+                // add it to the vector of cache misses and reset size 
                 if (size > 0) {
                     cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
                     size = 0;
                 }
             }
         }
-        if (size > 0) {
+
+        // if there were previous misses not tracked yet 
+        // add it to the vector of cache misses 
+        if (size > 0) 
             cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
-        }
+        
         return cacheMissVec;
     }
 
@@ -356,6 +363,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     void readMiss(uint64_t index, uint64_t offset, size_t size) {
         const std::lock_guard<std::mutex> lock(asyncDataUpdateMutex_);
         AsyncIORequest *ioReq = blockRequestVec_.at(index)->miss(size);
+        ioReq->startLatencyTracking(*backingStoreReadLatencyNs_);
         backingRead(ioReq, offset, size);
         if (index >= blockRequestVec_.size()) {
             throw std::runtime_error(
@@ -369,6 +377,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     void write(uint64_t index, uint64_t offset, size_t size) {
         const std::lock_guard<std::mutex> lock(asyncDataUpdateMutex_);
         AsyncIORequest *ioReq = blockRequestVec_.at(index)->miss(size);
+        ioReq->startLatencyTracking(*backingStoreWriteLatencyNs_);
         backingWrite(ioReq, offset, size);
         if (index >= blockRequestVec_.size()) {
             throw std::runtime_error(
@@ -378,48 +387,83 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    // process a read block request at a given index in the array containing BlockRequest objects 
+    // process a read block request
     void processBlockRead(uint64_t index, BlockReplayStats& stats) {
-        ++stats.readReqCount;
         BlockRequest *req = blockRequestVec_.at(index);
+
+        // start tracking time taken to complete a read block request 
+        req->startLatencyTracking(*blockReadLatencyNs_);
         uint64_t reqSize = req->getSize();
+
+        // block read stats 
+        ++stats.readReqCount;
         stats.readReqBytes += reqSize;
 
+        // update block alignment stats 
+        uint64_t frontMisAlignment = req->getFrontMisAlignment(backingStoreAlignment);
+        if (frontMisAlignment > 0) {
+            stats.readMisalignmentCount += 1;
+            stats.misalignmentBytes += frontMisAlignment;
+        }
+
+        uint64_t rearMisAlignment = req->getRearMisAlignment(backingStoreAlignment);
+        if (rearMisAlignment > 0) {
+            stats.readMisalignmentCount += 1;
+            stats.misalignmentBytes += rearMisAlignment;
+        }
+
+        // submit async IO requests based on cache misses 
         uint64_t missSize = 0;
-        req->startLatencyTracking(*backingStoreReadLatencyNs_);
-        std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req);
+        std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req, stats);
         for (std::tuple<uint64_t, size_t> miss : cacheMissVec) {
             readMiss(index, std::get<0>(miss), std::get<1>(miss));
             missSize += std::get<1>(miss);
         }
+
+        // the remaining bytes that were not misses were cache hits 
         req->hit(req->getTotalIo()-missSize);
+
         if (req->isRequestProcessed()) {
             delete blockRequestVec_.at(index);
             blockRequestVec_.at(index) = nullptr;
+        }
+
+        if ((frontMisAlignment == 0) && (rearMisAlignment == 0)) {
+            stats.readAlignedCount += 1;
         }
     }
 
 
-    // process a write block request at a given index in the array containing BlockRequest objects 
+    // process a write block request
     void processBlockWrite(uint64_t index, BlockReplayStats& stats) {
-        ++stats.writeReqCount;
-        uint64_t minReqSize = 512;
         BlockRequest *req = blockRequestVec_.at(index);
+        
+        // start tracking time taken to complete a write block request 
+        req->startLatencyTracking(*blockWriteLatencyNs_);
         uint64_t reqSize = req->getSize();
+
+        // block write stats 
+        ++stats.writeReqCount;
         stats.writeReqBytes += reqSize;
 
-        uint64_t frontMisAlignment = req->getFrontMisAlignment(512);
-        uint64_t rearMisAlignment = req->getRearMisAlignment(512);
-        std::cout << folly::sformat("Front: {} Rear: {} \n", frontMisAlignment, rearMisAlignment);
-        req->startLatencyTracking(*backingStoreWriteLatencyNs_);
+        // read request due to misalignment 
+        uint64_t frontMisAlignment = req->getFrontMisAlignment(backingStoreAlignment);
         if (frontMisAlignment > 0) {
             readMiss(index, req->getStartPage()*req->getPageSize(), frontMisAlignment);
+
+            stats.writeMisalignmentCount += 1;
+            stats.misalignmentBytes += frontMisAlignment;
         } 
 
         write(index, req->getOffset(), req->getSize());
 
+        // read request due to misalignment 
+        uint64_t rearMisAlignment = req->getRearMisAlignment(backingStoreAlignment);
         if (rearMisAlignment > 0) {
             readMiss(index, req->getOffset()+req->getSize(), rearMisAlignment);
+
+            stats.writeMisalignmentCount += 1;
+            stats.misalignmentBytes += rearMisAlignment;
         } 
 
         if (req->isRequestProcessed()) {
@@ -427,6 +471,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             blockRequestVec_.at(index) = nullptr;
         }
 
+        if ((frontMisAlignment == 0) && (rearMisAlignment == 0)) {
+            stats.writeAlignedCount += 1;
+        }
     }   
 
 
@@ -450,16 +497,18 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 uint64_t offset = std::stoul(req.key) * config_.replayGeneratorConfig.traceBlockSizeBytes;
                 uint64_t size = *(req.sizeBegin);
 
-                ++stats.reqCount; 
+                ++stats.blockReqCount; 
                 stats.reqBytes += size; 
-
-                std::cout << folly::sformat("Count: {} ({}/{}), Off: {}, Size: {}, Pending: {} \n", 
-                                                stats.reqCount,
+                
+                std::cout << folly::sformat("Count: {} ({}/{}), Off: {}, Size: {}, Pending: {}, Hit: {} LoadFail: {} \n", 
+                                                stats.blockReqCount,
                                                 stats.readReqCount,
                                                 stats.writeReqCount,
                                                 offset,
                                                 size, 
-                                                pendingIOCount_);
+                                                pendingIOCount_,
+                                                stats.readPageHitCount,
+                                                stats.loadPageFailure);
 
                 switch (op) {
                 case OpType::kGet: {
@@ -577,10 +626,15 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     std::vector<BlockRequest*> blockRequestVec_;
     std::map<iocb*, uint64_t> blockRequestMap_;
 
-    // read and write latency of the backing store 
+    // TODO: percentile read and write request to the backing store 
+
+    // TODO: percentile read and write block request size 
+
+    // percentile read and write latency of the backing store 
     util::PercentileStats *backingStoreReadLatencyNs_ = new util::PercentileStats();
     util::PercentileStats *backingStoreWriteLatencyNs_ = new util::PercentileStats();
 
+    // percetile read and write latency of each block request 
     util::PercentileStats *blockReadLatencyNs_ = new util::PercentileStats();
     util::PercentileStats *blockWriteLatencyNs_ = new util::PercentileStats();
     

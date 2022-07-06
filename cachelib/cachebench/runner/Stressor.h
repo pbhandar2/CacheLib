@@ -59,7 +59,7 @@ struct ThroughputStats {
 struct BlockReplayStats {
   
   // IO count 
-  uint64_t reqCount{0}; 
+  uint64_t blockReqCount{0}; 
   uint64_t readReqCount{0};
   uint64_t writeReqCount{0};
 
@@ -67,6 +67,16 @@ struct BlockReplayStats {
   uint64_t reqBytes{0};
   uint64_t readReqBytes{0};
   uint64_t writeReqBytes{0};
+
+  // IO size processed 
+  uint64_t totalIOProcessed{0};
+
+  uint64_t readMisalignmentCount{0};
+  uint64_t writeMisalignmentCount{0};
+  uint64_t misalignmentBytes{0};
+
+  uint64_t writeAlignedCount{0};
+  uint64_t readAlignedCount{0};
 
   uint64_t readPageCount{0};
   uint64_t readPageHitCount{0};

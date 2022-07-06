@@ -48,7 +48,7 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 }
 
 BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
-  reqCount += other.reqCount;
+  blockReqCount += other.blockReqCount;
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
 
@@ -58,6 +58,15 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
   readPageCount += other.readPageCount;
   writePageCount += other.writePageCount;
+
+  totalIOProcessed += other.totalIOProcessed;
+
+  readMisalignmentCount += other.readMisalignmentCount;
+  writeMisalignmentCount += other.writeMisalignmentCount;
+  misalignmentBytes += other.misalignmentBytes;
+
+  writeAlignedCount += other.writeAlignedCount;
+  readAlignedCount += other.readAlignedCount;
 
   readPageHitCount += other.readPageHitCount;
   writePageHitCount += other.writePageHitCount;
@@ -81,24 +90,33 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
 
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
   out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
+  out << folly::sformat("Block request count: {} \n", blockReqCount);
+  out << folly::sformat("Total IO requested (bytes): {} \n", reqBytes);
+  out << folly::sformat("Read block request count: {} \n", readReqCount);
+  out << folly::sformat("Total read IO requested (bytes): {} \n", readReqBytes);
+  out << folly::sformat("Write block request count: {} \n", writeReqCount);
+  out << folly::sformat("Total write IO requested (bytes): {} \n", writeReqBytes);
+  out << folly::sformat("Page read count: {} \n", readPageCount);
+  out << folly::sformat("Page write Count: {} \n", writePageCount);
+  out << folly::sformat("Total IO processed (bytes) : {} \n", totalIOProcessed);
+  out << folly::sformat("Read aligned block request count: {}\n", readAlignedCount);
+  out << folly::sformat("Write aligned block request count: {}\n", writeAlignedCount);
+  out << folly::sformat("Read misalignment count: {} \n", readMisalignmentCount);
+  out << folly::sformat("Write misalignment count: {} \n", writeMisalignmentCount);
+  out << folly::sformat("Total misalignment IO processed (bytes): {} \n", misalignmentBytes);
+  out << folly::sformat("Read page hit count: {} \n", readPageHitCount);
 
-  out << folly::sformat("IO Request Count: {} \n", reqCount);
-  out << folly::sformat("Total IO (Bytes): {} \n", reqBytes);
+  const double readHitRatio = readPageHitCount/(double) readPageCount;
+  if (readPageCount > 0)
+    out << folly::sformat("Read page hit rate: {:6.2f}%\n", readHitRatio);
+  else
+    out << folly::sformat("Read page hit rate: 0.0\n");
 
-  out << folly::sformat("Read Count: {} \n", readReqCount);
-  out << folly::sformat("Read IO (Bytes): {} \n", readReqBytes);
+  
 
-  out << folly::sformat("Write Count: {} \n", writeReqCount);
-  out << folly::sformat("Write IO (Bytes): {} \n", writeReqBytes);
 
-  out << folly::sformat("Read Page Count: {} \n", readPageCount);
-  out << folly::sformat("Read Page Hit Count: {} \n", readPageHitCount);
-
-  out << folly::sformat("Write Page Count: {} \n", writePageCount);
-  out << folly::sformat("Write Page Hit Count: {} \n", writePageHitCount);
-
-  out << folly::sformat("Read Block Request Failure: {} \n", readBlockRequestFailure);
-  out << folly::sformat("Write Block Request Failure: {} \n", writeBlockRequestFailure);
+  // out << folly::sformat("Tier 1 hit rate: {}\n");
+  // out << folly::sformat("Tier 2 hit rate: {}\n");
 
 }
 

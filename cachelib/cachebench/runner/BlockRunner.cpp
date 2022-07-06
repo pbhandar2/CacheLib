@@ -43,13 +43,15 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
     uint64_t durationNs = stressor_->getTestDurationNs();
     BlockReplayStats replayStats = stressor_->aggregateBlockReplayStats();
 
-
-    // std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
     auto cacheStats = stressor_->getCacheStats();
-    cacheStats.render(std::cout);
-    // replayStats.render(durationNs, std::cout);
+
+    // render block replay statistics 
+    replayStats.render(durationNs, std::cout);
     replayStats.renderPercentile(std::cout, "Backing Store Read Latency Percentile", stressor_->getBackingStoreReadLatencyStat());
     replayStats.renderPercentile(std::cout, "Backing Store Write Latency Percentile", stressor_->getBackingStoreWriteLatencyStat());
+
+    cacheStats.blockRender(std::cout);
+
     tracker.stop();
     stressor_.reset();
     return true; 

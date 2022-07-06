@@ -64,18 +64,27 @@ struct AsyncIORequest {
 
 
 class BlockRequest {
+
     public:
         BlockRequest(uint64_t offset, size_t size, OpType op, uint64_t pageSize) {
+
             offset_ = offset; 
             size_ = size; 
             op_ = op; 
             pageSize_ = pageSize; 
+
             startPage_ = offset_/pageSize_;
             endPage_ = (offset_ + size_ - 1)/pageSize_; 
+
+            // the index of the array can be mapped to specific pages 
+            // how do we know once everything is completed which 
+            // pages do we need to set? 
+
             if (op_ == OpType::kGet) 
                 pendingAsyncIoVec_.resize(endPage_-startPage_+1);    
             else
                 pendingAsyncIoVec_.resize(endPage_-startPage_+3); 
+            
         }
 
         ~BlockRequest() {
@@ -192,6 +201,7 @@ class BlockRequest {
             }
         }
 
+
         // initiate an AsyncIORequest on a cache miss 
         AsyncIORequest* miss(size_t size) {
             std::lock_guard<std::mutex> l(updateMutex_);
@@ -203,8 +213,24 @@ class BlockRequest {
                     break;
                 }
             }
+
             return pendingAsyncIoVec_.at(index);
         }
+
+
+        void addMissKey(uint64_t key) {
+            missKeyVec_.push_back(key);
+        }
+
+
+        bool checkKeyMiss(uint64_t key) {
+            if (std::find(missKeyVec_.begin(), missKeyVec_.end(), key) != missKeyVec_.end()) {
+                return true;
+            } else {
+                return false; 
+            }
+        }
+
 
         // set specified bytes as a cache hit 
         void hit(size_t size) {
@@ -225,6 +251,7 @@ class BlockRequest {
     uint64_t ioProcessed_ = 0;
     bool requestProcessed_ = false;
     std::vector<AsyncIORequest*> pendingAsyncIoVec_;
+    std::vector<uint64_t> missKeyVec_;
 
     // track the latency between starting tracking and the request being processed 
     facebook::cachelib::util::LatencyTracker *tracker_ = nullptr;
