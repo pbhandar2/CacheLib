@@ -157,6 +157,16 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    util::PercentileStats* getBlockReadSizePercentile() const override {
+        return blockReadSize_;
+    }
+
+
+    util::PercentileStats* getBlockWriteSizePercentile() const override {
+        return blockWriteSize_;
+    }
+
+
     // populate the input item handle according to the stress setup.
     void populateItem(ItemHandle& handle) {
         if (!config_.populateItem) {
@@ -398,6 +408,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         // block read stats 
         ++stats.readReqCount;
         stats.readReqBytes += reqSize;
+        blockReadSize_->trackValue(reqSize);
 
         // update block alignment stats 
         uint64_t frontMisAlignment = req->getFrontMisAlignment(backingStoreAlignment);
@@ -416,6 +427,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         uint64_t missSize = 0;
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req, stats);
         for (std::tuple<uint64_t, size_t> miss : cacheMissVec) {
+            ++stats.backingStoreReadCount;
             readMiss(index, std::get<0>(miss), std::get<1>(miss));
             missSize += std::get<1>(miss);
         }
@@ -428,6 +440,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             blockRequestVec_.at(index) = nullptr;
         }
 
+        // track if request is aligned 
         if ((frontMisAlignment == 0) && (rearMisAlignment == 0)) {
             stats.readAlignedCount += 1;
         }
@@ -445,6 +458,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         // block write stats 
         ++stats.writeReqCount;
         stats.writeReqBytes += reqSize;
+        blockWriteSize_->trackValue(reqSize);
 
         // read request due to misalignment 
         uint64_t frontMisAlignment = req->getFrontMisAlignment(backingStoreAlignment);
@@ -471,6 +485,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             blockRequestVec_.at(index) = nullptr;
         }
 
+        // track if request is aligned 
         if ((frontMisAlignment == 0) && (rearMisAlignment == 0)) {
             stats.writeAlignedCount += 1;
         }
@@ -500,15 +515,14 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 ++stats.blockReqCount; 
                 stats.reqBytes += size; 
                 
-                std::cout << folly::sformat("Count: {} ({}/{}), Off: {}, Size: {}, Pending: {}, Hit: {} LoadFail: {} \n", 
+                std::cout << folly::sformat("Count: {} ({}/{}), Off: {}, Size: {}, Pending: {}, Hit: {} \n", 
                                                 stats.blockReqCount,
                                                 stats.readReqCount,
                                                 stats.writeReqCount,
                                                 offset,
                                                 size, 
                                                 pendingIOCount_,
-                                                stats.readPageHitCount,
-                                                stats.loadPageFailure);
+                                                stats.readPageHitCount);
 
                 switch (op) {
                 case OpType::kGet: {
@@ -553,7 +567,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             std::cout << "Pending Count: " << pendingIOCount_ << " \n";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // 1 sec
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000)); // 5 sec
         replayThreadTerminated_.at(fileIndex) = true;
     }
 
@@ -592,13 +605,17 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             return val;
         }
 
-    const StressorConfig config_; // config for the stress run
+    // configuration of the block cache stressor 
+    const StressorConfig config_; 
 
-    std::vector<BlockReplayStats> blockReplayStats_; // thread local stats
+    // replay stats
+    std::vector<BlockReplayStats> blockReplayStats_; 
 
-    std::vector<bool> replayThreadTerminated_; // whether the repaly thread should be terminated
+    // flag that signal trace replay is completed including pending IOs 
+    std::vector<bool> replayThreadTerminated_; 
 
-    std::unique_ptr<GeneratorBase> wg_; // workload generator
+    // workload generator
+    std::unique_ptr<GeneratorBase> wg_; 
 
     // string used for generating random payloads
     const std::string hardcodedString_;
@@ -617,18 +634,28 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     // time when benchmark finished. This is set once the benchmark finishes
     std::chrono::time_point<std::chrono::system_clock> endTime_;
 
+    // IO context and file handle to perform async IO 
     io_context_t* ctx_;
+    int backingStoreFileHandle_;
+
     uint64_t pendingIOCount_{0};
 
-    int backingStoreFileHandle_;
+    // mutex to control access to blockRequestVec_ and blockRequestMap_
     std::mutex asyncDataUpdateMutex_;
 
+    // array of block requests 
     std::vector<BlockRequest*> blockRequestVec_;
+
+    // mapping each async block request to a index of the block request 
     std::map<iocb*, uint64_t> blockRequestMap_;
 
-    // TODO: percentile read and write request to the backing store 
+    // percentile read and write request to the backing store 
+    util::PercentileStats *backingStoreReadSize_ = new util::PercentileStats();
+    util::PercentileStats *backingStoreWriteSize_ = new util::PercentileStats();
 
-    // TODO: percentile read and write block request size 
+    // percentile read and write block request size 
+    util::PercentileStats *blockReadSize_ = new util::PercentileStats();
+    util::PercentileStats *blockWriteSize_ = new util::PercentileStats();
 
     // percentile read and write latency of the backing store 
     util::PercentileStats *backingStoreReadLatencyNs_ = new util::PercentileStats();

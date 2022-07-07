@@ -48,29 +48,35 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 }
 
 BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
+  // types of block request 
   blockReqCount += other.blockReqCount;
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
 
+  // total IO size (bytes) of different types of request 
   reqBytes += other.reqBytes;
   readReqBytes += other.readReqBytes;
   writeReqBytes += other.writeReqBytes;
 
+  // total pages accessed 
   readPageCount += other.readPageCount;
   writePageCount += other.writePageCount;
 
+  // total IO processed by the cache system 
   totalIOProcessed += other.totalIOProcessed;
 
+  // stats on request alignment 
   readMisalignmentCount += other.readMisalignmentCount;
   writeMisalignmentCount += other.writeMisalignmentCount;
   misalignmentBytes += other.misalignmentBytes;
-
   writeAlignedCount += other.writeAlignedCount;
   readAlignedCount += other.readAlignedCount;
 
+  // read and write page hit 
   readPageHitCount += other.readPageHitCount;
   writePageHitCount += other.writePageHitCount;
 
+  // backing store request count 
   readBackingStoreReqCount += other.readBackingStoreReqCount;
   writeBackingStoreReqCount += other.writeBackingStoreReqCount;
 
