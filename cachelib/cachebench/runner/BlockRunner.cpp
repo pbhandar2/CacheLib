@@ -64,6 +64,14 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
                                     "Write block request size",
                                     stressor_->getBlockWriteSizePercentile());
 
+    replayStats.renderPercentile(std::cout,
+                                    "Block read latency",
+                                    stressor_->getBlockReadLatencyPercentile());
+
+    replayStats.renderPercentile(std::cout,
+                                    "Block write latency",
+                                    stressor_->getBlockWriteLatencyPercentile());
+
     cacheStats.blockRender(std::cout);
 
     tracker.stop();

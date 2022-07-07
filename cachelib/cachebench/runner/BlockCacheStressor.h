@@ -147,6 +147,16 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    util::PercentileStats* getBlockReadLatencyPercentile() const override {
+        return blockReadLatencyNs_;
+    }
+
+
+    util::PercentileStats* getBlockWriteLatencyPercentile() const override {
+        return blockWriteLatencyNs_;
+    }
+
+
     util::PercentileStats* getBackingStoreReadLatencyStat() const override {
         return backingStoreReadLatencyNs_;
     }
@@ -218,11 +228,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     const std::string strkey = std::to_string(pageKey);
                     if (blockRequestVec_.at(index)->getOp() == OpType::kGet) {
                         if (blockRequestVec_.at(index)->checkKeyMiss(pageKey)) {
-                            std::cout << "LOADING KEYYYYY\n";
                             loadKey(strkey, stats);
                         }
                         else {
-                            std::cout << "RECORDDDD\n";
                             ++stats.readPageHitCount;
                             cache_->recordAccess(strkey);
                         }
@@ -427,14 +435,27 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         uint64_t missSize = 0;
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req, stats);
         for (std::tuple<uint64_t, size_t> miss : cacheMissVec) {
-            ++stats.backingStoreReadCount;
+            ++stats.readBackingStoreReqCount;
             readMiss(index, std::get<0>(miss), std::get<1>(miss));
             missSize += std::get<1>(miss);
         }
 
+        // update stats based on what portion of block request was a hit 
+        if (missSize == 0) {
+            stats.readPageHitCount += req->pageCount();
+            ++stats.readBlockHitCount;
+        } else if (missSize == reqSize) {
+            ++stats.readBlockMissCount;
+        } else {
+            ++stats.readBlockPartialHitCount;
+        }
+
+        // update backing store stats 
+        stats.totalBackingStoreIO += missSize;
+        stats.totalReadBackingStoreIO += missSize;
+
         // the remaining bytes that were not misses were cache hits 
         req->hit(req->getTotalIo()-missSize);
-
         if (req->isRequestProcessed()) {
             delete blockRequestVec_.at(index);
             blockRequestVec_.at(index) = nullptr;
@@ -453,29 +474,52 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         
         // start tracking time taken to complete a write block request 
         req->startLatencyTracking(*blockWriteLatencyNs_);
-        uint64_t reqSize = req->getSize();
 
         // block write stats 
+        uint64_t reqSize = req->getSize();
         ++stats.writeReqCount;
+        ++stats.writeBackingStoreReqCount;
         stats.writeReqBytes += reqSize;
+        stats.totalBackingStoreIO += reqSize;
+        stats.totalWriteBackingStoreIO += reqSize;
         blockWriteSize_->trackValue(reqSize);
 
-        // read request due to misalignment 
+        // read a page from cache or from backing store due to misalignment 
         uint64_t frontMisAlignment = req->getFrontMisAlignment(backingStoreAlignment);
         if (frontMisAlignment > 0) {
-            readMiss(index, req->getStartPage()*req->getPageSize(), frontMisAlignment);
-
+            stats.readPageCount++;
+            // check if the misaligned page is already in cache 
+            const std::string key = std::to_string(req->getStartPage());
+            auto it = cache_->find(key, AccessMode::kRead);
+            if (it == nullptr) {
+                // page not in cache read from backing store 
+                readMiss(index, req->getStartPage()*req->getPageSize(), frontMisAlignment);
+            } else {
+                // page in cache, no need for any async IO 
+                ++stats.readPageHitCount;
+                ++stats.writeMisalignmentHitCount;
+            }
             stats.writeMisalignmentCount += 1;
             stats.misalignmentBytes += frontMisAlignment;
         } 
 
         write(index, req->getOffset(), req->getSize());
 
-        // read request due to misalignment 
+        // read a page from cache or from backing store due to misalignment 
         uint64_t rearMisAlignment = req->getRearMisAlignment(backingStoreAlignment);
         if (rearMisAlignment > 0) {
-            readMiss(index, req->getOffset()+req->getSize(), rearMisAlignment);
-
+            stats.readPageCount++;
+            // check if the misaligned page is already in cache 
+            const std::string key = std::to_string(req->getEndPage());
+            auto it = cache_->find(key, AccessMode::kRead);
+            if (it == nullptr) {
+                // page not in cache read from backing store 
+                readMiss(index, req->getOffset()+req->getSize(), rearMisAlignment);
+            } else {
+                // page in cache, no need for any async IO 
+                ++stats.readPageHitCount;
+                ++stats.writeMisalignmentHitCount;
+            }
             stats.writeMisalignmentCount += 1;
             stats.misalignmentBytes += rearMisAlignment;
         } 

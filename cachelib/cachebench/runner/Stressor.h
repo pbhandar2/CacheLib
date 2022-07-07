@@ -81,11 +81,20 @@ struct BlockReplayStats {
   uint64_t readPageCount{0};
   uint64_t readPageHitCount{0};
 
+  uint64_t readBlockHitCount{0};
+  uint64_t readBlockPartialHitCount{0};
+  uint64_t readBlockMissCount{0};
+  uint64_t writeMisalignmentHitCount{0};
+
   uint64_t writePageCount{0};
   uint64_t writePageHitCount{0};
 
   uint64_t readBackingStoreReqCount{0};
   uint64_t writeBackingStoreReqCount{0};
+
+  uint64_t totalBackingStoreIO{0};
+  uint64_t totalReadBackingStoreIO{0};
+  uint64_t totalWriteBackingStoreIO{0};
 
   uint64_t readBackingStoreFailureCount{0};
   uint64_t writeBackingStoreFailureCount{0};
@@ -192,6 +201,8 @@ class BlockCacheStressorBase {
   // abort the run
   virtual void abort() { stopTest(); }
 
+  virtual util::PercentileStats* getBlockReadLatencyPercentile() const = 0;
+  virtual util::PercentileStats* getBlockWriteLatencyPercentile() const = 0;
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
   virtual util::PercentileStats* getBackingStoreReadLatencyStat() const = 0;
