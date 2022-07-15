@@ -118,6 +118,14 @@ struct Stats {
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
 
+  uint64_t getRAMItemCount() {
+    return numItems;
+  }
+
+  uint64_t getNVMItemCount() {
+    return numNvmItems;
+  }
+
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);

@@ -34,13 +34,21 @@ enum class BlockOpResultType {
 
 
 struct AsyncIORequest {
-    AsyncIORequest(size_t len, uint64_t alignment) {
-        size = len;
-        alignment = alignment;
-        int ret = posix_memalign((void**) &buffer, alignment, size);
-        if (ret != 0) {
+    AsyncIORequest(size_t requestSize, size_t backingStoreAlign) { 
+        size_ = requestSize;       
+        if (requestSize < backingStoreAlign) {
             throw std::runtime_error(
-                folly::sformat("Error in posix_memalign, return: {}\n", ret));
+                folly::sformat("Size: {} < alignment: {} \n", requestSize, backingStoreAlign));
+        }
+        try {
+            int ret = posix_memalign((void**) &buffer, backingStoreAlign, requestSize);
+            if (ret != 0) {
+                throw std::runtime_error(
+                    folly::sformat("Error in posix_memalign, return: {}\n", ret));
+            }
+        } catch (...) {
+            throw std::runtime_error(
+                folly::sformat("POSIX memalign failed! align: {} size: {}\n", backingStoreAlign, requestSize));
         }
     }
 
@@ -57,8 +65,7 @@ struct AsyncIORequest {
 
     iocb *iocbPtr = new iocb(); 
     char *buffer;
-    size_t size;
-    uint64_t alignment;
+    size_t size_;
     facebook::cachelib::util::LatencyTracker *tracker = nullptr;
 };
 
@@ -66,12 +73,13 @@ struct AsyncIORequest {
 class BlockRequest {
 
     public:
-        BlockRequest(uint64_t offset, size_t size, OpType op, uint64_t pageSize) {
+        BlockRequest(uint64_t offset, size_t size, OpType op, uint64_t pageSize, size_t alignment) {
 
             offset_ = offset; 
             size_ = size; 
             op_ = op; 
             pageSize_ = pageSize; 
+            alignment_ = alignment;
 
             startPage_ = offset_/pageSize_;
             endPage_ = (offset_ + size_ - 1)/pageSize_; 
@@ -103,8 +111,8 @@ class BlockRequest {
         // get the number of bytes by which the block request is not aligned in the front
         // also make sure either you don't do IO and if you do, 
         // it has to be larger than aligment size (e.g. 512 for HDD)
-        uint64_t getFrontMisAlignment(uint64_t backingStoreAlignment) {
-            uint64_t minOffset = startPage_*pageSize_;
+        size_t getFrontMisAlignment(size_t backingStoreAlignment) {
+            size_t minOffset = startPage_*pageSize_;
             if (offset_-minOffset == 0) {
                 return 0;
             } else {
@@ -126,22 +134,24 @@ class BlockRequest {
 
         // get the total IO to be done for the block request based on read/write 
         size_t getTotalIo() {
+            size_t totalIO;
             if (op_ == OpType::kGet) {
-                return (endPage_-startPage_+1)*pageSize_;
+                totalIO =  (endPage_-startPage_+1)*pageSize_;
             } else {
-                return getFrontMisAlignment(512)+getRearMisAlignment(512)+size_;
+                totalIO = getFrontMisAlignment(alignment_)+getRearMisAlignment(alignment_)+size_;
             }
+            return totalIO;
         }
 
         uint64_t pageCount() {
             return endPage_-startPage_+1;
         }
 
-        uint64_t getSize() {
+        size_t getSize() {
             return size_;
         }
 
-        uint64_t getOffset() {
+        size_t getOffset() {
             return offset_;
         }
 
@@ -173,12 +183,13 @@ class BlockRequest {
 
         // on completion of async IO, this callback is called 
         void ioCompleted(iocb *iocbPtrDone) {
+            std::lock_guard<std::mutex> l(updateMutex_);
             uint64_t i = getAsyncIoIndex(iocbPtrDone);
             if (i == pendingAsyncIoVec_.size()) {
                 throw std::runtime_error(
                     folly::sformat("IOCB pointer not found when completed. \n"));
             } 
-
+            ioReturned_++;
             ioProcessed_ += iocbPtrDone->u.v.nr;
             delete pendingAsyncIoVec_.at(i);
             pendingAsyncIoVec_.at(i) = nullptr;
@@ -203,12 +214,12 @@ class BlockRequest {
 
 
         // initiate an AsyncIORequest on a cache miss 
-        AsyncIORequest* miss(size_t size) {
+        AsyncIORequest* miss(size_t size, size_t alignment) {
             std::lock_guard<std::mutex> l(updateMutex_);
             uint64_t index = pendingAsyncIoVec_.size();
             for (uint64_t i=0; i<pendingAsyncIoVec_.size(); i++) {
                 if (pendingAsyncIoVec_.at(i) == nullptr) {
-                    pendingAsyncIoVec_.at(i) = new AsyncIORequest(size, 512);
+                    pendingAsyncIoVec_.at(i) = new AsyncIORequest(size, alignment);
                     index = i;
                     break;
                 }
@@ -245,10 +256,12 @@ class BlockRequest {
     uint64_t pageSize_;
     uint64_t startPage_;
     uint64_t endPage_;
+    size_t alignment_;
 
     // tracking how much of the IO has been processed 
     // either marked as a hit or request to backing store completed on miss 
-    uint64_t ioProcessed_ = 0;
+    size_t ioProcessed_ = 0;
+    uint64_t ioReturned_ = 0;
     bool requestProcessed_ = false;
     std::vector<AsyncIORequest*> pendingAsyncIoVec_;
     std::vector<uint64_t> missKeyVec_;

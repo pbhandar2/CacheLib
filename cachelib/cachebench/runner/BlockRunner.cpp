@@ -50,11 +50,11 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
 
     replayStats.renderPercentile(std::cout, 
                                     "Backing Store Read Latency Percentile", 
-                                    stressor_->getBackingStoreReadLatencyStat());
+                                    stressor_->getBackingStoreReadLatencyPercentile());
 
     replayStats.renderPercentile(std::cout, 
                                     "Backing Store Write Latency Percentile", 
-                                    stressor_->getBackingStoreWriteLatencyStat());
+                                    stressor_->getBackingStoreWriteLatencyPercentile());
 
     replayStats.renderPercentile(std::cout,
                                     "Read block request size",

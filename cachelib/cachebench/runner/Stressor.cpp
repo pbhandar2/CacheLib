@@ -94,11 +94,17 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   readBackingStoreFailureCount += other.readBackingStoreFailureCount;
   writeBackingStoreFailureCount += other.writeBackingStoreFailureCount;
 
-  readBlockRequestFailure += other.readBlockRequestFailure;
-  writeBlockRequestFailure += other.writeBlockRequestFailure;
-
   loadCount += other.loadCount;
   loadPageFailure += other.loadPageFailure;
+
+  // track if any block request or async IO were dropped 
+  // due to no space in queue 
+  readBlockRequestDropCount += other.readBlockRequestDropCount;
+  readBlockRequestDropBytes += other.readBlockRequestDropBytes;
+  writeBlockRequestDropCount += other.writeBlockRequestDropCount;
+  writeBlockRequestDropBytes += other.writeBlockRequestDropBytes;
+
+  backingStoreRequestDropCount += other.backingStoreRequestDropCount;
 
   return *this;
 }
@@ -108,8 +114,12 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   out << folly::sformat("Block request count: {} \n", blockReqCount);
   out << folly::sformat("Total IO requested (bytes): {} \n", reqBytes);
   out << folly::sformat("Read block request count: {} \n", readReqCount);
+  out << folly::sformat("Read block request drop count: {}\n", readBlockRequestDropCount);
+  out << folly::sformat("Read block request total IO dropped (bytes): {}\n", readBlockRequestDropBytes);
   out << folly::sformat("Total read IO requested (bytes): {} \n", readReqBytes);
   out << folly::sformat("Write block request count: {} \n", writeReqCount);
+  out << folly::sformat("Write block request dropped: {}\n", writeBlockRequestDropCount);
+  out << folly::sformat("Write block request total IO dropped (bytes): {}\n", writeBlockRequestDropBytes);
   out << folly::sformat("Total write IO requested (bytes): {} \n", writeReqBytes);
   out << folly::sformat("Page read count: {} \n", readPageCount);
   out << folly::sformat("Page write Count: {} \n", writePageCount);
@@ -129,6 +139,9 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   out << folly::sformat("Read block request miss count: {} \n", readBlockMissCount);
   out << folly::sformat("Read block request partial hit count: {} \n", readBlockPartialHitCount);
   out << folly::sformat("Write misalignment hit count: {} \n", writeMisalignmentHitCount);
+  out << folly::sformat("Cache load page count: {} \n", loadCount);
+  out << folly::sformat("Cache load page failure count: {} \n", loadPageFailure);
+
   const double readHitRatio = readPageHitCount/(double) readPageCount;
   if (readPageCount > 0)
     out << folly::sformat("Read page hit rate: {:6.2f}\n", readHitRatio);
@@ -155,6 +168,7 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   out << folly::sformat("Read block request IOPS: {:6.2f}\n", readBlockReqIOPS);
   out << folly::sformat("Write block request IOPS: {:6.2f}\n", writeBlockReqIOPS);
   out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
+  
 }
 
 

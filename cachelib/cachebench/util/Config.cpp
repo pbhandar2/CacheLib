@@ -78,7 +78,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 536>();
+  checkCorrectSize<StressorConfig, 544>();
 }
 
 bool StressorConfig::usesChainedItems() const {
@@ -193,6 +193,7 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, traceBlockSizeBytes);
   JSONSetVal(configJson, pageSizeBytes);
   JSONSetVal(configJson, diskFilePath);
+  JSONSetVal(configJson, minLBA);
 
   if (configJson.count("mlAdmissionConfig")) {
     mlAdmissionConfig =
@@ -206,7 +207,7 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
         "Unsupported request serialization mode: {}", replaySerializationMode));
   }
 
-  checkCorrectSize<ReplayGeneratorConfig, 200>();
+  checkCorrectSize<ReplayGeneratorConfig, 208>();
 }
 
 ReplayGeneratorConfig::SerializeMode

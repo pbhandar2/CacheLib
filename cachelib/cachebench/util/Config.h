@@ -140,6 +140,7 @@ struct ReplayGeneratorConfig : public JSONConfig {
   uint64_t traceBlockSizeBytes{512};
   uint64_t pageSizeBytes{4096};
   std::string diskFilePath{};
+  uint64_t minLBA{0};
 
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which

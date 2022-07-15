@@ -18,7 +18,8 @@ class BlockTraceReplay : public MultiReplayGeneratorBase {
       : MultiReplayGeneratorBase(config),
         lbaVec_(config.numThreads, ""),
         opVec_(config.numThreads, OpType::kGet),
-        sizeVec_(config.numThreads, config.replayGeneratorConfig.pageSizeBytes) {
+        sizeVec_(config.numThreads, config.replayGeneratorConfig.pageSizeBytes),
+        minLBA_(config.replayGeneratorConfig.minLBA) {
           for (int i=0; i<config.numThreads; i++) {
             requestVec_.push_back(Request(lbaVec_.at(i), sizeVec_.begin(), sizeVec_.end(), opVec_.at(i)));
           }
@@ -32,6 +33,7 @@ class BlockTraceReplay : public MultiReplayGeneratorBase {
     std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   private:
+    uint64_t minLBA_;
     std::vector<std::string> lbaVec_;
     std::vector<OpType> opVec_;
     std::vector<size_t> sizeVec_;
@@ -57,8 +59,9 @@ const Request& BlockTraceReplay::getReq(uint8_t fileIndex,
 
     // LBA 
     std::getline(row_stream, token, ',');
-    lbaVec_.at(fileIndex) = token;
-    requestVec_.at(fileIndex).key = token;
+    uint64_t lba = std::stoul(token) - minLBA_;
+    lbaVec_.at(fileIndex) = std::to_string(lba);
+    requestVec_.at(fileIndex).key = std::to_string(lba);
 
     // Operation (read/write)
     std::getline(row_stream, token, ',');

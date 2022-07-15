@@ -99,11 +99,20 @@ struct BlockReplayStats {
   uint64_t readBackingStoreFailureCount{0};
   uint64_t writeBackingStoreFailureCount{0};
 
-  uint64_t readBlockRequestFailure{0};
-  uint64_t writeBlockRequestFailure{0};
-
+  // insert page into the cache 
   uint64_t loadCount{0};
   uint64_t loadPageFailure{0};
+
+  // block requests dropped 
+  uint64_t readBlockRequestDropCount{0};
+  uint64_t readBlockRequestDropBytes{0};
+  uint64_t writeBlockRequestDropCount{0};
+  uint64_t writeBlockRequestDropBytes{0};
+
+  // async IO request dropped due to being close to limit 
+  uint64_t backingStoreRequestDropCount{0};
+  uint64_t backingStoreFailure{0};
+
 
   // operator overload to aggregate multiple instances of ThroughputStats, one
   // from each  thread
@@ -205,8 +214,8 @@ class BlockCacheStressorBase {
   virtual util::PercentileStats* getBlockWriteLatencyPercentile() const = 0;
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
-  virtual util::PercentileStats* getBackingStoreReadLatencyStat() const = 0;
-  virtual util::PercentileStats* getBackingStoreWriteLatencyStat() const = 0;
+  virtual util::PercentileStats* getBackingStoreReadLatencyPercentile() const = 0;
+  virtual util::PercentileStats* getBackingStoreWriteLatencyPercentile() const = 0;
 
 
  protected:
