@@ -58,18 +58,29 @@ struct ThroughputStats {
 
 struct BlockReplayStats {
   
-  // IO count 
+  // Block request counts from workload
   uint64_t blockReqCount{0}; 
   uint64_t readReqCount{0};
   uint64_t writeReqCount{0};
+
+  // Backing store requests submitted 
+  uint64_t totalBackingStoreIO{0};
+  uint64_t totalReadBackingStoreIO{0};
+  uint64_t totalWriteBackingStoreIO{0};
+
+  // Block request processed 
+  uint64_t blockReqProcessed{0};
+  uint64_t totalBackingStoreIOReturned{0};
+
+  // Total IO processed 
+  uint64_t totalIOProcessed{0};
 
   // IO size requested 
   uint64_t reqBytes{0};
   uint64_t readReqBytes{0};
   uint64_t writeReqBytes{0};
 
-  // IO size processed 
-  uint64_t totalIOProcessed{0};
+
 
   uint64_t readMisalignmentCount{0};
   uint64_t writeMisalignmentCount{0};
@@ -92,9 +103,7 @@ struct BlockReplayStats {
   uint64_t readBackingStoreReqCount{0};
   uint64_t writeBackingStoreReqCount{0};
 
-  uint64_t totalBackingStoreIO{0};
-  uint64_t totalReadBackingStoreIO{0};
-  uint64_t totalWriteBackingStoreIO{0};
+
 
   uint64_t readBackingStoreFailureCount{0};
   uint64_t writeBackingStoreFailureCount{0};
@@ -112,6 +121,10 @@ struct BlockReplayStats {
   // async IO request dropped due to being close to limit 
   uint64_t backingStoreRequestDropCount{0};
   uint64_t backingStoreFailure{0};
+
+  uint64_t maxPendingIO{0};
+  uint64_t maxQueueSize{0};
+  uint64_t replayRuntime{0};
 
 
   // operator overload to aggregate multiple instances of ThroughputStats, one

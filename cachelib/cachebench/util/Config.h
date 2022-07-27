@@ -136,11 +136,19 @@ struct ReplayGeneratorConfig : public JSONConfig {
   uint32_t numExtraFields{0};
 
   std::vector<std::string> traceList{};
+
   bool skipHeader{false};
+
   uint64_t traceBlockSizeBytes{512};
+
   uint64_t pageSizeBytes{4096};
+
   std::string diskFilePath{};
+
   uint64_t minLBA{0};
+
+  uint64_t processorThreadCount{8};
+  uint64_t asyncIOTrackerThreadCount{8};
 
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which

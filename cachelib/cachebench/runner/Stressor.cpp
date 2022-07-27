@@ -53,6 +53,9 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
 
+  blockReqProcessed += other.blockReqProcessed;
+  totalBackingStoreIOReturned += other.totalBackingStoreIOReturned;
+
   // total IO size (bytes) of different types of request 
   reqBytes += other.reqBytes;
   readReqBytes += other.readReqBytes;
@@ -97,8 +100,6 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   loadCount += other.loadCount;
   loadPageFailure += other.loadPageFailure;
 
-  // track if any block request or async IO were dropped 
-  // due to no space in queue 
   readBlockRequestDropCount += other.readBlockRequestDropCount;
   readBlockRequestDropBytes += other.readBlockRequestDropBytes;
   writeBlockRequestDropCount += other.writeBlockRequestDropCount;
@@ -106,11 +107,18 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
   backingStoreRequestDropCount += other.backingStoreRequestDropCount;
 
+  maxPendingIO = std::max(other.maxPendingIO, maxPendingIO);
+  maxQueueSize = std::max(other.maxQueueSize, maxQueueSize); 
+  replayRuntime += other.replayRuntime; 
+
+  
+
   return *this;
 }
 
 void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
+  const double replayElapsedSecs = replayRuntime / static_cast<double>(1e9);
   out << folly::sformat("Block request count: {} \n", blockReqCount);
   out << folly::sformat("Total IO requested (bytes): {} \n", reqBytes);
   out << folly::sformat("Read block request count: {} \n", readReqCount);
@@ -167,7 +175,10 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   out << folly::sformat("Block request IOPS: {:6.2f}\n", blockReqIOPS);
   out << folly::sformat("Read block request IOPS: {:6.2f}\n", readBlockReqIOPS);
   out << folly::sformat("Write block request IOPS: {:6.2f}\n", writeBlockReqIOPS);
+  out << folly::sformat("Max pending IO count: {}\n", maxPendingIO);
+  out << folly::sformat("Max block request queue size: {}\n", maxQueueSize);
   out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
+  out << folly::sformat("Replay runtime(sec): {} \n", replayElapsedSecs);
   
 }
 
