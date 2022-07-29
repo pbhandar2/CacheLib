@@ -54,6 +54,7 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   writeReqCount += other.writeReqCount;
 
   blockReqProcessed += other.blockReqProcessed;
+  blockReqProcessing += other.blockReqProcessing;
   totalBackingStoreIOReturned += other.totalBackingStoreIOReturned;
 
   // total IO size (bytes) of different types of request 

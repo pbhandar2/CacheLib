@@ -70,6 +70,7 @@ struct BlockReplayStats {
 
   // Block request processed 
   uint64_t blockReqProcessed{0};
+  uint64_t blockReqProcessing{0};
   uint64_t totalBackingStoreIOReturned{0};
 
   // Total IO processed 

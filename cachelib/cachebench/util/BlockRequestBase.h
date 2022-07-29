@@ -34,8 +34,9 @@ enum class BlockOpResultType {
 
 
 struct AsyncIORequest {
-    AsyncIORequest(uint64_t requestSize, uint64_t backingStoreAlign) { 
+    AsyncIORequest(uint64_t requestSize, uint64_t backingStoreAlign, uint64_t key) { 
         size_ = requestSize;       
+        key_ = key;
         if (requestSize < backingStoreAlign) {
             throw std::runtime_error(
                 folly::sformat("Size: {} < alignment: {} \n", requestSize, backingStoreAlign));
@@ -63,8 +64,18 @@ struct AsyncIORequest {
         tracker = new facebook::cachelib::util::LatencyTracker(stats);
     }
 
+
+    uint64_t getSize() {
+        return size_;
+    }
+
+    uint64_t getKey() {
+        return key_;
+    }
+
     iocb *iocbPtr = new iocb(); 
     char *buffer;
+    uint64_t key_;
     uint64_t size_;
     facebook::cachelib::util::LatencyTracker *tracker = nullptr;
 };
@@ -87,16 +98,21 @@ class BlockRequest {
             startPage_ = offset_/pageSize_;
             endPage_ = (offset_ + size_ - 1)/pageSize_; 
 
+            frontMisAlignment_ = getFrontMisAlignment(alignment_);
+            rearMisAlignment_ = getRearMisAlignment(alignment_);
+
             if (op_ == OpType::kGet)  {
                 pendingAsyncIoVec_.resize(endPage_-startPage_+2);
                 completedIOCBPtr_.resize(endPage_-startPage_+2); 
+                totalIO_ = (endPage_-startPage_+1) * pageSize_;
             }
             else if (op_ == OpType::kSet) {
                 pendingAsyncIoVec_.resize(endPage_-startPage_+4);
                 completedIOCBPtr_.resize(endPage_-startPage_+4);
+                totalIO_ = frontMisAlignment_ + rearMisAlignment_ + size_;
             }
             else
-                throw std::runtime_error(folly::sformat("OP not recognized \n"));
+                throw std::runtime_error(folly::sformat("BlockRequestBase->OP not recognized \n"));
                 
             for (uint64_t i=0; i<pendingAsyncIoVec_.size(); i++){
                 pendingAsyncIoVec_.at(i) = nullptr;
@@ -163,6 +179,16 @@ class BlockRequest {
 
         uint64_t pageCount() {
             return endPage_-startPage_+1;
+        }
+
+
+        uint64_t frontMisAlignment() {
+            return frontMisAlignment_;
+        }
+
+
+        uint64_t rearMisAlignment() {
+            return rearMisAlignment_;
         }
 
 
@@ -349,7 +375,7 @@ class BlockRequest {
             uint64_t index = pendingAsyncIoVec_.size();
             for (uint64_t i=0; i<pendingAsyncIoVec_.size(); i++) {
                 if (pendingAsyncIoVec_.at(i) == nullptr) {
-                    pendingAsyncIoVec_.at(i) = new AsyncIORequest(size, alignment);
+                    pendingAsyncIoVec_.at(i) = new AsyncIORequest(size, alignment, 0);
                     index = i;
                     missBytes_ += size;
                     break;
@@ -361,6 +387,18 @@ class BlockRequest {
                     folly::sformat("Index: {} Size: {} \n", index, pendingAsyncIoVec_.size()));
 
             return pendingAsyncIoVec_.at(index);
+        }
+
+
+        bool isBlockRequestProcessed() {
+            bool blockRequestProcessed = false; 
+            std::lock_guard<std::mutex> l(updateMutex_);
+            if (ioProcessed_ == totalIO_) {
+                blockRequestProcessed = true;
+            } else if (ioProcessed_ > totalIO_) {
+                throw std::runtime_error(folly::sformat("checkIfRequestProcessed -> {}",getPrintString()));
+            }
+            return blockRequestProcessed;
         }
 
 
@@ -396,6 +434,10 @@ class BlockRequest {
     uint64_t endPage_;
     uint64_t alignment_;
     uint64_t missCount_=0;
+
+    uint64_t frontMisAlignment_;
+    uint64_t rearMisAlignment_;
+    uint64_t totalIO_;
 
     // tracking how much of the IO has been processed 
     // either marked as a hit or request to backing store completed on miss 
