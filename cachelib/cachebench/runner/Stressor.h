@@ -57,11 +57,28 @@ struct ThroughputStats {
 };
 
 struct BlockReplayStats {
-  
-  // Block request counts from workload
-  uint64_t blockReqCount{0}; 
+
+
+  // workload stats 
   uint64_t readReqCount{0};
   uint64_t writeReqCount{0};
+
+  uint64_t readReqBytes{0};
+  uint64_t writeReqBytes{0};
+
+
+  // system stats 
+  uint64_t readReqProcessCount{0};
+  uint64_t writeReqProcessCount{0};
+
+  uint64_t maxInputQueueSize{0};
+  uint64_t maxOutputQueueSize{0};
+  uint64_t maxPendingReq{0};
+
+
+  // Block request counts from workload
+  uint64_t blockReqCount{0}; 
+
 
   // Backing store requests submitted 
   uint64_t totalBackingStoreIO{0};
@@ -78,8 +95,8 @@ struct BlockReplayStats {
 
   // IO size requested 
   uint64_t reqBytes{0};
-  uint64_t readReqBytes{0};
-  uint64_t writeReqBytes{0};
+  
+  
 
 
 
@@ -225,7 +242,9 @@ class BlockCacheStressorBase {
   virtual void abort() { stopTest(); }
 
   virtual util::PercentileStats* getBlockReadLatencyPercentile() const = 0;
+  virtual util::PercentileStats* getTotalBlockReadLatencyPercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteLatencyPercentile() const = 0;
+  virtual util::PercentileStats* getTotalBlockWriteLatencyPercentile() const = 0;
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
   virtual util::PercentileStats* getBackingStoreReadLatencyPercentile() const = 0;

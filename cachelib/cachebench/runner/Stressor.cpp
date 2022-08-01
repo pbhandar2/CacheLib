@@ -48,10 +48,26 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 }
 
 BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
-  // types of block request 
-  blockReqCount += other.blockReqCount;
+
+
+  // workload stats   
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
+
+  readReqBytes += other.readReqBytes;
+  writeReqBytes += other.writeReqBytes;
+
+  maxPendingReq += other.maxPendingReq;
+
+
+  // system stats 
+  readReqProcessCount += other.readReqProcessCount;
+  writeReqProcessCount += other.writeReqProcessCount;
+
+  maxInputQueueSize += other.maxInputQueueSize;
+  maxOutputQueueSize += other.maxOutputQueueSize;
+  maxPendingReq += other.maxPendingReq;
+
 
   blockReqProcessed += other.blockReqProcessed;
   blockReqProcessing += other.blockReqProcessing;
@@ -59,8 +75,7 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
   // total IO size (bytes) of different types of request 
   reqBytes += other.reqBytes;
-  readReqBytes += other.readReqBytes;
-  writeReqBytes += other.writeReqBytes;
+
 
   // total pages accessed 
   readPageCount += other.readPageCount;
@@ -68,6 +83,8 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
   // total IO processed by the cache system 
   totalIOProcessed += other.totalIOProcessed;
+
+  blockReqCount += other.blockReqCount;
 
   // stats on request alignment 
   readMisalignmentCount += other.readMisalignmentCount;

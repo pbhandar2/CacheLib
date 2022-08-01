@@ -15,6 +15,7 @@
  */
 
 #include "cachelib/cachebench/runner/BlockRunner.h"
+#include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/runner/BlockCacheStressor.h"
 
 namespace facebook {
@@ -49,30 +50,34 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
     replayStats.render(durationNs, std::cout);
 
     replayStats.renderPercentile(std::cout, 
-                                    "Backing Store Read Latency Percentile", 
-                                    stressor_->getBackingStoreReadLatencyPercentile());
+                                    "Block Read sLat (ns)", 
+                                    stressor_->getTotalBlockReadLatencyPercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Backing Store Write Latency Percentile", 
-                                    stressor_->getBackingStoreWriteLatencyPercentile());
+                                    "Block Write sLat (ns)", 
+                                    stressor_->getTotalBlockWriteLatencyPercentile());
 
-    replayStats.renderPercentile(std::cout,
-                                    "Read block request size",
-                                    stressor_->getBlockReadSizePercentile());
+    // replayStats.renderPercentile(std::cout, 
+    //                                 "Backing Store Write Latency Percentile", 
+    //                                 stressor_->getBackingStoreWriteLatencyPercentile());
 
-    replayStats.renderPercentile(std::cout,
-                                    "Write block request size",
-                                    stressor_->getBlockWriteSizePercentile());
+    // replayStats.renderPercentile(std::cout,
+    //                                 "Read block request size",
+    //                                 stressor_->getBlockReadSizePercentile());
 
-    replayStats.renderPercentile(std::cout,
-                                    "Block read latency",
-                                    stressor_->getBlockReadLatencyPercentile());
+    // replayStats.renderPercentile(std::cout,
+    //                                 "Write block request size",
+    //                                 stressor_->getBlockWriteSizePercentile());
 
-    replayStats.renderPercentile(std::cout,
-                                    "Block write latency",
-                                    stressor_->getBlockWriteLatencyPercentile());
+    // replayStats.renderPercentile(std::cout,
+    //                                 "Block read latency",
+    //                                 stressor_->getBlockReadLatencyPercentile());
 
-    cacheStats.blockRender(std::cout);
+    // replayStats.renderPercentile(std::cout,
+    //                                 "Block write latency",
+    //                                 stressor_->getBlockWriteLatencyPercentile());
+
+    // cacheStats.blockRender(std::cout);
 
     tracker.stop();
     stressor_.reset();

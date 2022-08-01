@@ -147,8 +147,8 @@ struct ReplayGeneratorConfig : public JSONConfig {
 
   uint64_t minLBA{0};
 
-  uint64_t processorThreadCount{8};
-  uint64_t asyncIOTrackerThreadCount{8};
+  uint64_t processorThreadCount{16};
+  uint64_t asyncIOTrackerThreadCount{16};
 
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which
