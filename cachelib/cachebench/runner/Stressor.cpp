@@ -67,6 +67,7 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   maxInputQueueSize += other.maxInputQueueSize;
   maxOutputQueueSize += other.maxOutputQueueSize;
   maxPendingReq += other.maxPendingReq;
+  experimentRuntime += other.experimentRuntime;
 
 
   blockReqProcessed += other.blockReqProcessed;
@@ -137,6 +138,39 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
   const double replayElapsedSecs = replayRuntime / static_cast<double>(1e9);
+  const double experimentRuntimeSecs = experimentRuntime / static_cast<double>(1e9);
+
+  std::cout << "\n\n";
+
+  // runtime stats 
+  out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
+  out << folly::sformat("Replay runtime(sec): {} \n", replayElapsedSecs);
+  out << folly::sformat("Experiment runtime(sec): {} \n", experimentRuntimeSecs);
+
+
+  // performance stats 
+  auto readBandwidth = readReqBytes/experimentRuntimeSecs;
+  auto writeBandwidth = writeReqBytes/experimentRuntimeSecs;
+  auto bandwidth = (readReqBytes+writeReqBytes)/experimentRuntimeSecs;
+  auto readIOPS = readPageCount/experimentRuntimeSecs;
+  auto writeIOPS = writePageCount/experimentRuntimeSecs;
+  auto overallIOPS = (readPageCount+writePageCount)/experimentRuntimeSecs;
+  auto blockReqIOPS = blockReqCount/experimentRuntimeSecs;
+  auto readBlockReqIOPS = readReqCount/experimentRuntimeSecs;
+  auto writeBlockReqIOPS = writeReqCount/experimentRuntimeSecs;
+
+  out << folly::sformat("Bandwidth (bytes/sec): {:6.2f}\n", bandwidth);
+  out << folly::sformat("Read bandwidth (bytes/sec): {:6.2f}\n", readBandwidth);
+  out << folly::sformat("Write bandwidth (bytes/sec): {:6.2f}\n", writeBandwidth);
+  out << folly::sformat("Page IOPS: {:6.2f}\n", overallIOPS);
+  out << folly::sformat("Read page IOPS: {:6.2f}\n", readIOPS);
+  out << folly::sformat("Write page IOPS: {:6.2f}\n", writeIOPS);
+  out << folly::sformat("Block request IOPS: {:6.2f}\n", blockReqIOPS);
+  out << folly::sformat("Read block request IOPS: {:6.2f}\n", readBlockReqIOPS);
+  out << folly::sformat("Write block request IOPS: {:6.2f}\n", writeBlockReqIOPS);
+
+
+  // workload stats 
   out << folly::sformat("Block request count: {} \n", blockReqCount);
   out << folly::sformat("Total IO requested (bytes): {} \n", reqBytes);
   out << folly::sformat("Read block request count: {} \n", readReqCount);
@@ -174,29 +208,9 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   else
     out << folly::sformat("Read page hit rate: 0.0\n");
 
-  auto readBandwidth = readReqBytes/elapsedSecs;
-  auto writeBandwidth = writeReqBytes/elapsedSecs;
-  auto bandwidth = (readReqBytes+writeReqBytes)/elapsedSecs;
-  auto readIOPS = readPageCount/elapsedSecs;
-  auto writeIOPS = writePageCount/elapsedSecs;
-  auto overallIOPS = (readPageCount+writePageCount)/elapsedSecs;
-  auto blockReqIOPS = blockReqCount/elapsedSecs;
-  auto readBlockReqIOPS = readReqCount/elapsedSecs;
-  auto writeBlockReqIOPS = writeReqCount/elapsedSecs;
 
-  out << folly::sformat("Bandwidth (bytes/sec): {:6.2f}\n", bandwidth);
-  out << folly::sformat("Read bandwidth (bytes/sec): {:6.2f}\n", readBandwidth);
-  out << folly::sformat("Write bandwidth (bytes/sec): {:6.2f}\n", writeBandwidth);
-  out << folly::sformat("Page IOPS: {:6.2f}\n", overallIOPS);
-  out << folly::sformat("Read page IOPS: {:6.2f}\n", readIOPS);
-  out << folly::sformat("Write page IOPS: {:6.2f}\n", writeIOPS);
-  out << folly::sformat("Block request IOPS: {:6.2f}\n", blockReqIOPS);
-  out << folly::sformat("Read block request IOPS: {:6.2f}\n", readBlockReqIOPS);
-  out << folly::sformat("Write block request IOPS: {:6.2f}\n", writeBlockReqIOPS);
   out << folly::sformat("Max pending IO count: {}\n", maxPendingIO);
   out << folly::sformat("Max block request queue size: {}\n", maxQueueSize);
-  out << folly::sformat("Runtime(sec): {} \n", elapsedSecs);
-  out << folly::sformat("Replay runtime(sec): {} \n", replayElapsedSecs);
   
 }
 

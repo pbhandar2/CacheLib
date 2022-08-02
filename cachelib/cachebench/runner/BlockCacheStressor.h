@@ -199,13 +199,13 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    util::PercentileStats* getBackingStoreReadLatencyPercentile() const override {
-        return backingStoreReadLatencyNsPercentile_;
+    util::PercentileStats* latBackingReadPercentile() const override {
+        return latBackingReadPercentile_;
     }
 
 
-    util::PercentileStats* getBackingStoreWriteLatencyPercentile() const override {
-        return backingStoreWriteLatencyNsPercentile_;
+    util::PercentileStats* latBackingWritePercentile() const override {
+        return latBackingWritePercentile_;
     }
 
 
@@ -221,7 +221,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void printStatThread(BlockReplayStats& stats) {
         std::cout << "log: printer thread started \n";
-        while (!endExperimentFlag()) {
+        while (!endExperimentFlag(stats)) {
             std::this_thread::sleep_for(std::chrono::seconds(30));
             printCurrentStats(stats);
         }
@@ -298,10 +298,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-
-
     // submit asyn read IO request to the backing store 
     void submitAsyncRead(AsyncIORequest *asyncReq, uint64_t offset, uint64_t size) {
+        asyncReq->startLatencyTracking(*latBackingReadPercentile_);
         io_prep_pread(asyncReq->iocbPtr,
             backingStoreFileHandle_,
             (void*) asyncReq->buffer,
@@ -317,6 +316,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     // submit asyn write IO request to the backing store 
     void submitAsyncWrite(AsyncIORequest *asyncReq, uint64_t offset, uint64_t size) {
+        asyncReq->startLatencyTracking(*latBackingWritePercentile_);
         io_prep_pwrite(asyncReq->iocbPtr,
             backingStoreFileHandle_,
             (void*) asyncReq->buffer,
@@ -420,13 +420,19 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }  
 
 
-    bool endExperimentFlag() {
+    bool endExperimentFlag(BlockReplayStats& stats) {
         const bool replayCompleted = std::all_of(std::begin(replayDoneFlagVec_), 
                                                 std::begin(replayDoneFlagVec_)+config_.numThreads, 
                                                 []( const bool v){ return v; } );
         
         const std::lock_guard<std::mutex> l(inputQueueMutex_);
-        return (replayCompleted) && (pendingIOCount_ == 0) && (inputQueue_.size()==0);
+        if ((replayCompleted) && (pendingIOCount_ == 0) && (inputQueue_.size()==0) && (pendingBlockRequestCount_==0)) {
+            if (stats.experimentRuntime == 0)
+                stats.experimentRuntime = getTestDurationNs();
+            return true;
+        } else {
+            return false;
+        }
     }
 
 
@@ -453,7 +459,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         struct timespec timeout;
         timeout.tv_sec = 0;
         timeout.tv_nsec = 1000; // 1us
-        while (!endExperimentFlag()) {
+        while (!endExperimentFlag(stats)) {
             int ret = io_getevents(*ctx_, 1, maxConcurrentIO, events, &timeout);
             if (ret > 0) {
                 for (int eindex=0; eindex<ret; eindex++) {
@@ -573,7 +579,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void processCompletedRequest(BlockReplayStats& stats) {
         std::cout << "log: started completed request processor\n";
-        while (!endExperimentFlag()) {
+        while (!endExperimentFlag(stats)) {
             std::pair<AsyncIORequest*, bool> outputQueuePair = popFromOutputQueue(stats);
             AsyncIORequest* asyncReq = std::get<0>(outputQueuePair);
             bool writeFlag = std::get<1>(outputQueuePair);
@@ -722,7 +728,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
 
     void processRequest(BlockReplayStats& stats) {
-        while (!endExperimentFlag()) {
+        while (!endExperimentFlag(stats)) {
             std::tuple<uint64_t, uint64_t, OpType> reqTuple = popFromInputQueue(stats);
             OpType op = std::get<2>(reqTuple);
             uint64_t size = std::get<1>(reqTuple);
@@ -730,17 +736,17 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             if (size > 0) {
                 uint64_t index = getNextBlockReq(reqTuple);
                 if (index < maxPendingBlockRequests) {
-
                     BlockRequest *req = blockRequestVec_.at(index);
                     assert(req->getOp()==op);
                     assert(req->getSize()==size);
-
                     switch (op) {
                         case OpType::kGet: {
+                            req->startLatencyTracking(*cLatBlockReadPercentile_);
                             processRead(index, stats);
                             break;
                         }
                         case OpType::kSet: {
+                            req->startLatencyTracking(*cLatBlockWritePercentile_);
                             processWrite(index, stats);
                             break;
                         }
@@ -906,8 +912,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     util::PercentileStats *blockWriteSizeBytesPercentile_ = new util::PercentileStats();
 
     // percentile read and write latency of the backing store 
-    util::PercentileStats *backingStoreReadLatencyNsPercentile_ = new util::PercentileStats();
-    util::PercentileStats *backingStoreWriteLatencyNsPercentile_ = new util::PercentileStats();
+    util::PercentileStats *latBackingReadPercentile_ = new util::PercentileStats();
+    util::PercentileStats *latBackingWritePercentile_ = new util::PercentileStats();
 
     //-------------------------------------------------------------------------------------------//
     uint64_t pendingIOCount_{0};

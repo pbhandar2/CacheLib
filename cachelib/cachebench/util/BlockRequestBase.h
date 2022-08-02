@@ -114,7 +114,6 @@ class BlockRequest {
             }
 
             sLatTracker_ = new facebook::cachelib::util::LatencyTracker(stats);
-
         }
 
 

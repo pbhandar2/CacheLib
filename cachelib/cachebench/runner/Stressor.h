@@ -74,6 +74,7 @@ struct BlockReplayStats {
   uint64_t maxInputQueueSize{0};
   uint64_t maxOutputQueueSize{0};
   uint64_t maxPendingReq{0};
+  uint64_t experimentRuntime{0};
 
 
   // Block request counts from workload
@@ -245,11 +246,12 @@ class BlockCacheStressorBase {
   virtual util::PercentileStats* sLatBlockReadPercentile() const = 0;
   virtual util::PercentileStats* cLatBlockWritePercentile() const = 0;
   virtual util::PercentileStats* sLatBlockWritePercentile() const = 0;
-  
+  virtual util::PercentileStats* latBackingReadPercentile() const = 0;
+  virtual util::PercentileStats* latBackingWritePercentile() const = 0;
+
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
-  virtual util::PercentileStats* getBackingStoreReadLatencyPercentile() const = 0;
-  virtual util::PercentileStats* getBackingStoreWriteLatencyPercentile() const = 0;
+
 
 
  protected:
