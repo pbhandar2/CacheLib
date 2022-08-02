@@ -332,6 +332,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void printCurrentStats(BlockReplayStats& stats) {
         Stats cacheStats = cache_->getStats();
+        std::cout << "stat:";
 
         const uint64_t numSeconds = getTestDurationNs()/static_cast<double>(1e9);
         std::cout << folly::sformat("T={},",
@@ -708,6 +709,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doRead(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncMapMutex_);
+        stats.readBackingStoreReqCount++;
+        stats.totalReadBackingStoreIO+=size;
         AsyncIORequest *ioReq = new AsyncIORequest(size, backingStoreAlignment, index);
         pendingIOCount_++;
         if (pendingIOCount_ > stats.maxPendingIO)
@@ -719,6 +722,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doWrite(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncMapMutex_);
+        stats.writeBackingStoreReqCount++;
+        stats.totalWriteBackingStoreIO+=size;
         AsyncIORequest *ioReq = new AsyncIORequest(size, backingStoreAlignment, index);
         pendingIOCount_++;
         if (pendingIOCount_ > stats.maxPendingIO)
@@ -738,7 +743,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             uint64_t startPage = req->getStartPage();
             uint64_t startPageOffset = config_.replayGeneratorConfig.pageSizeBytes*startPage;
             // std::cout << folly::sformat("Front read: {},{},{}\n", startPage, startPageOffset, frontMisalignment);
-            doRead(index, startPageOffset, 4096, stats);
+            doRead(index, startPageOffset, config_.replayGeneratorConfig.pageSizeBytes, stats);
         }
             
         uint64_t rearMisalignment = req->getRearAlignment();
@@ -747,7 +752,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             uint64_t endPage = req->getEndPage();
             uint64_t endPageOffset = config_.replayGeneratorConfig.pageSizeBytes*endPage;
             // std::cout << folly::sformat("Rear read: {},{},{}\n", endPage, endPageOffset, rearMisalignment);
-            doRead(index, endPageOffset, 4096, stats);
+            doRead(index, endPageOffset, config_.replayGeneratorConfig.pageSizeBytes, stats);
         }
 
         doWrite(index, offset, size, stats);
@@ -836,6 +841,33 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    void appendToBlockInputQueue(const Request& req, BlockReplayStats& stats) {
+        const uint64_t lba = std::stoull(req.key);
+        const uint64_t size = *(req.sizeBegin);
+        const OpType op = req.getOp();
+        std::tuple<uint64_t, uint64_t, OpType> queueItem = std::make_tuple(lba, size, op);
+
+        switch (op) {
+            case OpType::kGet: {
+                stats.readReqCount++;
+                stats.readReqBytes += size; 
+                break;
+            }
+            case OpType::kSet: {
+                stats.writeReqCount++;
+                stats.writeReqBytes += size; 
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    folly::sformat("Invalid operation generated: {}", (int)op));
+        }
+
+        const std::lock_guard<std::mutex> l(inputQueueMutex_);
+        inputQueue_.push(queueItem);
+    }
+
+
 	// Replays a block trace on a cache allocator. 
 	//
 	// @param stats       Throughput stats
@@ -851,7 +883,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             } catch (const cachebench::EndOfTrace& ex) {
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::microseconds(250));
+            std::this_thread::sleep_for(std::chrono::microseconds(1));
         }  
         wg_->markFinish();
         stats.replayRuntime = getTestDurationNs();
@@ -896,13 +928,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     // mutexes 
     mutable std::mutex timeMutex_;
-    std::mutex replayDataMutex_;
-
-    std::mutex asyncIOMutex_;
-
-    std::mutex blockRequestQueueMutex_;
-
-    std::mutex iocbMapMutex_;
 
     std::unique_ptr<GeneratorBase> wg_; 
 
@@ -917,22 +942,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     std::chrono::time_point<std::chrono::system_clock> startTime_;
     std::chrono::time_point<std::chrono::system_clock> endTime_;
 
-    std::vector<BlockReplayStats> blockReplayStatVec_; 
-    std::vector<bool> replayDoneFlagVec_; 
-
-    // array of all block requests in the system 
-    
-
-    // queue of block request indexes that have not yet started processing 
-    std::queue<uint64_t> blockRequestQueue_;
-
-    std::queue<BlockRequest*> blockReqQueue_;
-
-    std::queue<iocb*> asyncIOCompletedQueue_;
-
-    // mapping each async block request to a index of the block request 
-    std::map<iocb*, uint64_t> blockRequestMap_;
-
     // percentile read and write request to the backing store 
     util::PercentileStats *backingStoreReadSizeBytesPercentile_ = new util::PercentileStats();
     util::PercentileStats *backingStoreWriteSizeBytesPercentile_ = new util::PercentileStats();
@@ -941,19 +950,21 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     util::PercentileStats *blockReadSizeBytesPercentile_ = new util::PercentileStats();
     util::PercentileStats *blockWriteSizeBytesPercentile_ = new util::PercentileStats();
 
-    // percentile read and write latency of the backing store 
-    util::PercentileStats *latBackingReadPercentile_ = new util::PercentileStats();
-    util::PercentileStats *latBackingWritePercentile_ = new util::PercentileStats();
-
     //-------------------------------------------------------------------------------------------//
     uint64_t pendingIOCount_{0};
     uint64_t pendingBlockRequestCount_{0};
     uint64_t totalMissVecSize_{0};
 
+    std::vector<bool> replayDoneFlagVec_; 
+    std::vector<BlockReplayStats> blockReplayStatVec_; 
+
     // input queue of block request to the storage system 
     // each request is a tuple of (lba, size, op[r/w])
     std::queue<std::tuple<uint64_t, uint64_t, OpType>> inputQueue_;
     mutable std::mutex inputQueueMutex_;
+
+    std::queue<BlockRequest*> blockInputQueue_;
+    mutable std::mutex blockInputQueueMutex_;
 
     std::vector<BlockRequest*> blockRequestVec_;
     mutable std::mutex pendingBlockRequestMutex_;
@@ -973,6 +984,10 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     // percetile read and write latency of each block request 
     util::PercentileStats *cLatBlockReadPercentile_ = new util::PercentileStats();
     util::PercentileStats *cLatBlockWritePercentile_ = new util::PercentileStats();
+
+    // percentile read and write latency of the backing store 
+    util::PercentileStats *latBackingReadPercentile_ = new util::PercentileStats();
+    util::PercentileStats *latBackingWritePercentile_ = new util::PercentileStats();
     
 };
 } // namespace cachebench

@@ -153,9 +153,9 @@ class BlockRequest {
             if (op_ == OpType::kGet) {
                 uint64_t totalIOProcessed = hitBytes_+readAsyncBytes_;
                 if (totalIOProcessed > totalIO_) {
-                    // throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
-                    std::cout<<folly::sformat("warning: Excess read -> {}\n", printStatus());
-                    doneFlag = true;
+                    throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
+                    // std::cout<<folly::sformat("warning: Excess read -> {}\n", printStatus());
+                    // doneFlag = true;
                 } else if (totalIOProcessed == totalIO_) {
                     doneFlag = true; 
                 }
@@ -164,9 +164,9 @@ class BlockRequest {
                 if (totalIOProcessed == totalIO_) {
                     doneFlag = true; 
                 } else if (totalIOProcessed > totalIO_) {
-                    // throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
-                    std::cout<<folly::sformat("warning: Excess write -> {}\n", printStatus());
-                    doneFlag = true; 
+                    throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
+                    // std::cout<<folly::sformat("warning: Excess write -> {}\n", printStatus());
+                    // doneFlag = true; 
                 }
             } else {
                 throw std::runtime_error(folly::sformat("Unknown req isBlockProcessed()\n"));

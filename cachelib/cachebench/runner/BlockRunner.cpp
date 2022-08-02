@@ -63,7 +63,7 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
 
     replayStats.renderPercentile(std::cout, 
                                     "Block Write cLat (ns)", 
-                                    stressor_->sLatBlockWritePercentile());
+                                    stressor_->cLatBlockWritePercentile());
 
     replayStats.renderPercentile(std::cout, 
                                     "Backing Read Lat (ns)", 
