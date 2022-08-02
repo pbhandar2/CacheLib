@@ -51,11 +51,19 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
 
     replayStats.renderPercentile(std::cout, 
                                     "Block Read sLat (ns)", 
-                                    stressor_->getTotalBlockReadLatencyPercentile());
+                                    stressor_->sLatBlockReadPercentile());
 
     replayStats.renderPercentile(std::cout, 
                                     "Block Write sLat (ns)", 
-                                    stressor_->getTotalBlockWriteLatencyPercentile());
+                                    stressor_->sLatBlockWritePercentile());
+
+    replayStats.renderPercentile(std::cout, 
+                                    "Block Read cLat (ns)", 
+                                    stressor_->cLatBlockReadPercentile());
+
+    replayStats.renderPercentile(std::cout, 
+                                    "Block Write cLat (ns)", 
+                                    stressor_->sLatBlockWritePercentile());
 
     // replayStats.renderPercentile(std::cout, 
     //                                 "Backing Store Write Latency Percentile", 

@@ -120,6 +120,13 @@ class BlockRequest {
 
         ~BlockRequest(){
             delete sLatTracker_;
+            if (cLatTracker_ != nullptr)
+                delete cLatTracker_;
+        }
+
+
+        void startLatencyTracking(facebook::cachelib::util::PercentileStats& stats) {
+            cLatTracker_ = new facebook::cachelib::util::LatencyTracker(stats);
         }
     
 

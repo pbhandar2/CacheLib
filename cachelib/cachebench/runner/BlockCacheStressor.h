@@ -98,8 +98,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     stressByBlockReplay(*blockReplayStats, index);
                 }));
             }
+
+            // process block request thread  
             for (uint64_t i = 0; i<config_.replayGeneratorConfig.processorThreadCount; ++i) {
-                // process block request thread  
                 workers.push_back(
                     std::thread([this, blockReplayStats = &blockReplayStatVec_.at(0)]() {
                     processRequest(*blockReplayStats);
@@ -112,6 +113,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 asyncIOTracker(*blockReplayStats);
             }));
 
+            // process completed block request thread 
             for (uint64_t i = 0; i<config_.replayGeneratorConfig.asyncIOTrackerThreadCount; ++i) {
                 workers.push_back(
                     std::thread([this, blockReplayStats = &blockReplayStatVec_.at(0)]() {
@@ -119,6 +121,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 }));
             }
             
+            // periodic stat printer thread 
             workers.push_back(
                 std::thread([this, blockReplayStats = &blockReplayStatVec_.at(0)]() {
                     printStatThread(*blockReplayStats);
@@ -176,23 +179,23 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    util::PercentileStats* getTotalBlockReadLatencyPercentile() const override {
-        return blockReadTotalLatNsPercentile_;
+    util::PercentileStats* sLatBlockReadPercentile() const override {
+        return sLatBlockReadPercentile_;
     }
 
 
-    util::PercentileStats* getTotalBlockWriteLatencyPercentile() const override {
-        return blockWriteTotalLatNsPercentile_;
+    util::PercentileStats* sLatBlockWritePercentile() const override {
+        return sLatBlockWritePercentile_;
     }
 
 
-    util::PercentileStats* getBlockReadLatencyPercentile() const override {
-        return blockReadLatencyNsPercentile_;
+    util::PercentileStats* cLatBlockReadPercentile() const override {
+        return cLatBlockReadPercentile_;
     }
 
 
-    util::PercentileStats* getBlockWriteLatencyPercentile() const override {
-        return blockWriteLatencyNsPercentile_;
+    util::PercentileStats* cLatBlockWritePercentile() const override {
+        return cLatBlockWritePercentile_;
     }
 
 
@@ -492,14 +495,14 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                                                                     std::get<2>(reqTuple),
                                                                     config_.replayGeneratorConfig.pageSizeBytes, 
                                                                     config_.replayGeneratorConfig.traceBlockSizeBytes,
-                                                                    *blockReadTotalLatNsPercentile_);
+                                                                    *sLatBlockReadPercentile_);
                 } else if (op == OpType::kSet) {
                     blockRequestVec_.at(reqIndex) = new BlockRequest(std::get<0>(reqTuple), 
                                                                     std::get<1>(reqTuple), 
                                                                     std::get<2>(reqTuple),
                                                                     config_.replayGeneratorConfig.pageSizeBytes, 
                                                                     config_.replayGeneratorConfig.traceBlockSizeBytes,
-                                                                    *blockWriteTotalLatNsPercentile_);
+                                                                    *sLatBlockWritePercentile_);
                 }
                 break;
             }
@@ -906,10 +909,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     util::PercentileStats *backingStoreReadLatencyNsPercentile_ = new util::PercentileStats();
     util::PercentileStats *backingStoreWriteLatencyNsPercentile_ = new util::PercentileStats();
 
-    // percetile read and write latency of each block request 
-    util::PercentileStats *blockReadLatencyNsPercentile_ = new util::PercentileStats();
-    util::PercentileStats *blockWriteLatencyNsPercentile_ = new util::PercentileStats();
-
     //-------------------------------------------------------------------------------------------//
     uint64_t pendingIOCount_{0};
     uint64_t pendingBlockRequestCount_{0};
@@ -932,8 +931,12 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     // queue of cache load requests 
     std::queue<std::tuple<uint64_t, uint64_t, OpType>> cacheLoadQueue_;
 
-    util::PercentileStats *blockReadTotalLatNsPercentile_ = new util::PercentileStats();
-    util::PercentileStats *blockWriteTotalLatNsPercentile_ = new util::PercentileStats();
+    util::PercentileStats *sLatBlockReadPercentile_ = new util::PercentileStats();
+    util::PercentileStats *sLatBlockWritePercentile_ = new util::PercentileStats();
+
+    // percetile read and write latency of each block request 
+    util::PercentileStats *cLatBlockReadPercentile_ = new util::PercentileStats();
+    util::PercentileStats *cLatBlockWritePercentile_ = new util::PercentileStats();
     
 };
 } // namespace cachebench

@@ -241,10 +241,11 @@ class BlockCacheStressorBase {
   // abort the run
   virtual void abort() { stopTest(); }
 
-  virtual util::PercentileStats* getBlockReadLatencyPercentile() const = 0;
-  virtual util::PercentileStats* getTotalBlockReadLatencyPercentile() const = 0;
-  virtual util::PercentileStats* getBlockWriteLatencyPercentile() const = 0;
-  virtual util::PercentileStats* getTotalBlockWriteLatencyPercentile() const = 0;
+  virtual util::PercentileStats* cLatBlockReadPercentile() const = 0;
+  virtual util::PercentileStats* sLatBlockReadPercentile() const = 0;
+  virtual util::PercentileStats* cLatBlockWritePercentile() const = 0;
+  virtual util::PercentileStats* sLatBlockWritePercentile() const = 0;
+  
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
   virtual util::PercentileStats* getBackingStoreReadLatencyPercentile() const = 0;
