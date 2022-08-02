@@ -415,7 +415,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         // std::cout << folly::sformat("WriteRatio={:.3f}\n \n",
         //                             writeRatio);
 
-        std::cout << "\n";
+        std::cout << "\n\n";
 
     }  
 
@@ -424,9 +424,32 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         const bool replayCompleted = std::all_of(std::begin(replayDoneFlagVec_), 
                                                 std::begin(replayDoneFlagVec_)+config_.numThreads, 
                                                 []( const bool v){ return v; } );
+
+        uint64_t inputQueueSize;
+        {
+            const std::lock_guard<std::mutex> l(inputQueueMutex_);
+            inputQueueSize = inputQueue_.size();
+        }
+
+        uint64_t outputQueueSize;
+        {
+            const std::lock_guard<std::mutex> l(outputQueueMutex_);
+            outputQueueSize = outputQueue_.size();
+        }
+
+        uint64_t curPendingIOCount;
+        {
+            const std::lock_guard<std::mutex> l(iocbToAsyncMapMutex_);
+            curPendingIOCount = pendingIOCount_;
+        }
+
+        uint64_t curPendingBlockRequestCount;
+        {
+            const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
+            curPendingBlockRequestCount = pendingBlockRequestCount_;
+        }
         
-        const std::lock_guard<std::mutex> l(inputQueueMutex_);
-        if ((replayCompleted) && (pendingIOCount_ == 0) && (inputQueue_.size()==0) && (pendingBlockRequestCount_==0)) {
+        if ((replayCompleted) && (curPendingIOCount == 0) && (inputQueueSize==0) && (outputQueueSize==0) && (curPendingBlockRequestCount==0)) {
             if (stats.experimentRuntime == 0)
                 stats.experimentRuntime = getTestDurationNs();
             return true;
@@ -486,7 +509,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-
     uint64_t getNextBlockReq(std::tuple<uint64_t, uint64_t, OpType> reqTuple) {
         const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
         uint64_t index = maxPendingBlockRequests;
@@ -514,12 +536,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             }
         }
         return index;
-    }
-
-
-    void updateHit(BlockRequest* req, uint64_t size) {
-        // const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
-        // req->async(size);
     }
 
 
@@ -648,8 +664,22 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         } else {
             // need to submit IOs to disk for cache misses 
             req->hit(reqTotalIO-cacheMissBytes);
-            AsyncIORequest *ioReq = new AsyncIORequest(cacheMissBytes, backingStoreAlignment, index);
-            appendToOutputQueue(ioReq, false);
+            // AsyncIORequest *ioReq = new AsyncIORequest(cacheMissBytes, backingStoreAlignment, index);
+            // appendToOutputQueue(ioReq, false);
+                
+            for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
+                // an async IO request for each and add it to map 
+                AsyncIORequest* aioReq = new AsyncIORequest(
+                                                std::get<1>(miss), 
+                                                backingStoreAlignment, 
+                                                index);
+
+                doRead(index, 
+                        std::get<0>(miss), 
+                        std::get<1>(miss), 
+                        stats);
+            }
+
         }
         // else {
         //     if ((reqTotalIO-cacheMissBytes)>0)
