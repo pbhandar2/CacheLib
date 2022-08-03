@@ -540,6 +540,21 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    uint64_t getNextBlockRequest(BlockRequest* req) {
+        const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
+        uint64_t index = maxPendingBlockRequests;
+        for (uint64_t reqIndex=0; reqIndex<blockRequestVec_.size(); reqIndex++) {
+            if (blockRequestVec_.at(reqIndex) == nullptr) {
+                pendingBlockRequestCount_++;
+                index = reqIndex;
+                blockRequestVec_.at(reqIndex) = req;
+                break;
+            }
+        }
+        return index;
+    }
+
+
     void removeBlockRequest(uint64_t index) {
         const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
         delete blockRequestVec_.at(index);
@@ -764,14 +779,13 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void processRequest(BlockReplayStats& stats) {
         while (!endExperimentFlag(stats)) {
-            std::tuple<uint64_t, uint64_t, OpType> reqTuple = popFromInputQueue(stats);
-            OpType op = std::get<2>(reqTuple);
-            uint64_t size = std::get<1>(reqTuple);
-
-            if (size > 0) {
-                uint64_t index = getNextBlockReq(reqTuple);
+            BlockRequest* req = popFromBlockInputQueue(stats);
+            if (req != nullptr) {
+                uint64_t index = getNextBlockRequest(req);
+                OpType op = req->getOp();
+                uint64_t size = req->getSize();
                 if (index < maxPendingBlockRequests) {
-                    BlockRequest *req = blockRequestVec_.at(index);
+                    // BlockRequest *req = blockRequestVec_.at(index);
                     assert(req->getOp()==op);
                     assert(req->getSize()==size);
                     switch (op) {
@@ -813,6 +827,18 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         return reqTuple;
     }
 
+    BlockRequest* popFromBlockInputQueue(BlockReplayStats& stats) {
+        const std::lock_guard<std::mutex> l(blockInputQueueMutex_);
+        BlockRequest *req = nullptr;
+        uint64_t queueSize = blockInputQueue_.size();
+        if (queueSize > 0) {
+            req = blockInputQueue_.front();
+            blockInputQueue_.pop();
+        }
+        if (queueSize > stats.maxInputQueueSize)
+            stats.maxInputQueueSize = queueSize; 
+        return req;
+    }
 
     void appendToInputQueue(const Request& req, BlockReplayStats& stats) {
         const uint64_t lba = std::stoull(req.key);
@@ -845,17 +871,28 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         const uint64_t lba = std::stoull(req.key);
         const uint64_t size = *(req.sizeBegin);
         const OpType op = req.getOp();
-        std::tuple<uint64_t, uint64_t, OpType> queueItem = std::make_tuple(lba, size, op);
-
+        BlockRequest* blockReq;
         switch (op) {
             case OpType::kGet: {
                 stats.readReqCount++;
                 stats.readReqBytes += size; 
+                blockReq = new BlockRequest(lba, 
+                                        size, 
+                                        op,
+                                        config_.replayGeneratorConfig.pageSizeBytes, 
+                                        config_.replayGeneratorConfig.traceBlockSizeBytes,
+                                        *sLatBlockReadPercentile_);
                 break;
             }
             case OpType::kSet: {
                 stats.writeReqCount++;
                 stats.writeReqBytes += size; 
+                blockReq = new BlockRequest(lba, 
+                                        size, 
+                                        op,
+                                        config_.replayGeneratorConfig.pageSizeBytes, 
+                                        config_.replayGeneratorConfig.traceBlockSizeBytes,
+                                        *sLatBlockWritePercentile_);
                 break;
             }
             default:
@@ -863,8 +900,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     folly::sformat("Invalid operation generated: {}", (int)op));
         }
 
-        const std::lock_guard<std::mutex> l(inputQueueMutex_);
-        inputQueue_.push(queueItem);
+        const std::lock_guard<std::mutex> l(blockInputQueueMutex_);
+        blockInputQueue_.push(blockReq);
     }
 
 
@@ -879,11 +916,11 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         while (true) {
             try {
                 const Request& req(getReq(fileIndex, gen, lastRequestId)); 
-                appendToInputQueue(req, stats);
+                appendToBlockInputQueue(req, stats);
             } catch (const cachebench::EndOfTrace& ex) {
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::microseconds(1));
+            std::this_thread::sleep_for(std::chrono::nanoseconds(1000000));
         }  
         wg_->markFinish();
         stats.replayRuntime = getTestDurationNs();

@@ -93,7 +93,7 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
     //                                 "Block write latency",
     //                                 stressor_->getBlockWriteLatencyPercentile());
 
-    // cacheStats.blockRender(std::cout);
+    cacheStats.blockRender(std::cout);
 
     tracker.stop();
     stressor_.reset();
