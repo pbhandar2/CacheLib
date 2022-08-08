@@ -1,0 +1,24 @@
+{
+    "cache_config": {
+        "cacheSizeMB": 100,
+        "allocSizes": [4136]
+    },
+    "test_config": {
+        "populateItem": true,
+        "generator": "multi-replay",
+        "numThreads": 1,
+        "inputQueueSize": 32,
+        "processorThreadCount": 2,
+        "asyncIOTrackerThreadCount": 8,
+        "traceBlockSizeBytes": 512,
+        "pageSizeBytes": 4096,
+        "delayNs": 1000000,
+        "statPrintDelaySec": 20,
+        "relativeTiming": true, 
+        "diskFilePath": "/users/pbhandar/flash/disk.file",
+        "replayGeneratorConfig": {
+            "traceList": ["/users/pbhandar/cp_traces/w103.csv"],
+            "skipHeader": false
+        }
+    }
+}
