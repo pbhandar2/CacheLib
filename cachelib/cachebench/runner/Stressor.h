@@ -251,7 +251,7 @@ class BlockCacheStressorBase {
 
   virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
   virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
-
+  virtual util::PercentileStats* getLatDiffPercentile() const = 0;
 
 
  protected:

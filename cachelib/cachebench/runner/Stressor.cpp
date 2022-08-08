@@ -228,7 +228,7 @@ void BlockReplayStats::renderPercentile(std::ostream& out, folly::StringPiece de
               const util::PercentileStats::Estimates& latency) {
         auto fmtLatency = [&out, &cat](folly::StringPiece pct,
                                         double val) {
-          out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
+          out << folly::sformat("{:20} {:8} : {:>10.2f}\n", cat, pct,
                                 val);
         };
 

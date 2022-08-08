@@ -139,16 +139,7 @@ struct ReplayGeneratorConfig : public JSONConfig {
 
   bool skipHeader{false};
 
-  uint64_t traceBlockSizeBytes{512};
-
-  uint64_t pageSizeBytes{4096};
-
-  std::string diskFilePath{};
-
   uint64_t minLBA{0};
-
-  uint64_t processorThreadCount{32};
-  uint64_t asyncIOTrackerThreadCount{32};
 
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which
@@ -264,6 +255,16 @@ struct StressorConfig : public JSONConfig {
 
   // admission policy for cache.
   std::shared_ptr<StressorAdmPolicy> admPolicy{};
+
+  uint64_t inputQueueSize{128};
+  uint64_t processorThreadCount{32};
+  uint64_t asyncIOTrackerThreadCount{32};
+  uint64_t delayNs{1000000};
+  uint64_t statPrintDelaySec{5};
+  uint64_t traceBlockSizeBytes{512};
+  uint64_t pageSizeBytes{4096};
+  std::string diskFilePath{};
+  bool relativeTiming{true};
 
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);

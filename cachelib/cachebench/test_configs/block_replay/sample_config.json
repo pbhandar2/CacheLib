@@ -1,20 +1,23 @@
 {
-    "cache_config": {
+  "cache_config": {
       "cacheSizeMB": 100,
       "allocSizes": [4136]
-    },
-    "test_config":
-      {
-        "populateItem": true,
-        "generator": "multi-replay",
-        "numThreads": 1,
-        "replayGeneratorConfig": {
-            "traceList": ["../../cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
-            "skipHeader": false,
-            "traceBlockSizeBytes": 512,
-            "pageSizeBytes": 4096,
-            "diskFilePath": "../../cachelib/cachebench/test_configs/block_replay/disk.file"
-        }
+  },
+  "test_config": {
+      "populateItem": true,
+      "generator": "multi-replay",
+      "numThreads": 1,
+      "inputQueueSize": 128,
+      "processorThreadCount": 16,
+      "asyncIOTrackerThreadCount": 8,
+      "traceBlockSizeBytes": 512,
+      "pageSizeBytes": 4096,
+      "delayNs": 1000000,
+      "statPrintDelaySec": 10,
+      "diskFilePath": "../../cachelib/cachebench/test_configs/block_replay/disk.file",
+      "replayGeneratorConfig": {
+          "traceList": ["../../cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
+          "skipHeader": false
       }
-  
   }
+}

@@ -72,6 +72,13 @@ struct Request {
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
           OpType o,
+          uint64_t ts)
+      : key(k), sizeBegin(b), sizeEnd(e), op(o), timestamp(ts) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          OpType o,
           uint32_t ttl,
           uint64_t reqId,
           const std::unordered_map<std::string, std::string>& admFeatureM)
@@ -97,6 +104,9 @@ struct Request {
 
   OpType getOp() const noexcept { return op.load(); }
   void setOp(OpType o) noexcept { op = o; }
+
+  uint64_t getTs() const noexcept { return timestamp; }
+  void setTs(uint64_t ts) noexcept { timestamp = ts; }
 
   std::string& key;
 

@@ -18,10 +18,11 @@ class BlockTraceReplay : public MultiReplayGeneratorBase {
       : MultiReplayGeneratorBase(config),
         lbaVec_(config.numThreads, ""),
         opVec_(config.numThreads, OpType::kGet),
-        sizeVec_(config.numThreads, config.replayGeneratorConfig.pageSizeBytes),
+        sizeVec_(config.numThreads, config.pageSizeBytes),
+        tsVec_(config.numThreads, 0),
         minLBA_(config.replayGeneratorConfig.minLBA) {
           for (int i=0; i<config.numThreads; i++) {
-            requestVec_.push_back(Request(lbaVec_.at(i), sizeVec_.begin(), sizeVec_.end(), opVec_.at(i)));
+            requestVec_.push_back(Request(lbaVec_.at(i), sizeVec_.begin(), sizeVec_.end(), opVec_.at(i), tsVec_.at(i)));
           }
         }
 
@@ -37,6 +38,7 @@ class BlockTraceReplay : public MultiReplayGeneratorBase {
     std::vector<std::string> lbaVec_;
     std::vector<OpType> opVec_;
     std::vector<size_t> sizeVec_;
+    std::vector<uint64_t> tsVec_;
     std::vector<Request> requestVec_;
 
 };
@@ -56,6 +58,9 @@ const Request& BlockTraceReplay::getReq(uint8_t fileIndex,
 
     // Timestamp 
     std::getline(row_stream, token, ',');
+    uint64_t ts = std::stoul(token);
+    tsVec_.at(fileIndex) = ts;
+    requestVec_.at(fileIndex).setTs(ts);
 
     // LBA 
     std::getline(row_stream, token, ',');
@@ -81,6 +86,7 @@ const Request& BlockTraceReplay::getReq(uint8_t fileIndex,
     *(requestVec_.at(fileIndex).sizeBegin) = sizeVec_.at(fileIndex);
 
     return requestVec_.at(fileIndex);
+    
 }
 
 } // namespace cachebench

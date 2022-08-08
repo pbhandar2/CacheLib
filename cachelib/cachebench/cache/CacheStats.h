@@ -126,6 +126,11 @@ struct Stats {
     return numNvmItems;
   }
 
+  double getHitRate() {
+    auto totalMisses = getTotalMisses();
+    return invertPctFn(totalMisses, numCacheGets);
+  }
+
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
