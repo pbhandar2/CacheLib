@@ -25,6 +25,7 @@ enum class BlockOpType {
   kRemove
 };
 
+
 enum class BlockOpResultType {
   kNop = 0,
   kReadMiss,
@@ -35,34 +36,58 @@ enum class BlockOpResultType {
 
 
 struct AsyncIORequest {
-    AsyncIORequest(uint64_t requestSize, uint64_t backingStoreAlign, uint64_t key) { 
-        size_ = requestSize;       
-        key_ = key;
-        if (requestSize < backingStoreAlign) {
-            throw std::runtime_error(
-                folly::sformat("Size: {} < alignment: {} \n", requestSize, backingStoreAlign));
-        }
-        try {
-            int ret = posix_memalign((void**) &buffer, backingStoreAlign, requestSize);
-            if (ret != 0) {
-                throw std::runtime_error(
-                    folly::sformat("Error in posix_memalign, return: {}\n", ret));
-            }
-        } catch (...) {
-            throw std::runtime_error(
-                folly::sformat("POSIX memalign failed! align: {} size: {}\n", backingStoreAlign, requestSize));
-        }
-    }
+    AsyncIORequest() {}
 
     ~AsyncIORequest() {
-        if (tracker != nullptr)
-            delete tracker;
-        delete buffer;
-        delete iocbPtr;
+        if (size_ > 0) {
+            if (tracker_ != nullptr)
+                delete tracker_;
+            delete iocbPtr_;
+        }
     }
 
+    void loader(uint64_t size,             uint64_t asyncIOIndex,
+            uint64_t blockRequestIndex) {
+        size_ = size;
+        asyncIOIndex_ = asyncIOIndex;
+        blockRequestIndex_ = blockRequestIndex;  
+    }
+
+    void load(uint64_t requestSize, 
+            uint64_t backingStoreAlign, 
+            uint64_t asyncIOIndex,
+            uint64_t blockRequestIndex) { 
+
+        if (size_ > 0) 
+            throw std::runtime_error(folly::sformat("load: data already loaded in async request, cannot overwrite, size>0 \n"));
+
+        size_ = requestSize;
+        asyncIOIndex_ = asyncIOIndex;
+        blockRequestIndex_ = blockRequestIndex;       
+        iocbPtr_ = new iocb();
+    }
+
+
+    void reset() {
+        if (size_ == 0) 
+            throw std::runtime_error(folly::sformat("reset(): data not loaded in async request, size=0 \n"));
+        
+        size_ = 0;
+        delete iocbPtr_;
+        if (tracker_ != nullptr) {
+            delete tracker_;
+            tracker_ = nullptr;
+        }
+    }
+
+
     void startLatencyTracking(facebook::cachelib::util::PercentileStats& stats) {
-        tracker = new facebook::cachelib::util::LatencyTracker(stats);
+        tracker_ = new facebook::cachelib::util::LatencyTracker(stats);
+    }
+
+
+    bool isDataLoaded() {
+        return size_>0; 
     }
 
 
@@ -70,27 +95,51 @@ struct AsyncIORequest {
         return size_;
     }
 
-    uint64_t getKey() {
-        return key_;
+
+    uint64_t getAsyncIOIndex() {
+        return asyncIOIndex_;
     }
 
-    iocb *iocbPtr = new iocb(); 
-    char *buffer;
-    uint64_t key_;
-    uint64_t size_;
-    facebook::cachelib::util::LatencyTracker *tracker = nullptr;
+
+    uint64_t getBlockRequestIndex() {
+        return blockRequestIndex_;
+    }
+
+
+    iocb *iocbPtr_;
+    uint64_t blockRequestIndex_;
+    uint64_t asyncIOIndex_;
+    uint64_t size_=0;
+    facebook::cachelib::util::LatencyTracker *tracker_ = nullptr;
 };
 
 
 class BlockRequest {
     public:
-        BlockRequest(uint64_t lba, 
+        BlockRequest() {}
+
+
+        ~BlockRequest(){
+            if (size_ > 0) {
+                delete sLatTracker_;
+                if (cLatTracker_ != nullptr) {
+                    delete cLatTracker_;
+                    cLatTracker_ = nullptr;
+                }
+            }
+        }
+
+
+        void load(uint64_t lba, 
                         uint64_t size, 
                         OpType op, 
                         uint64_t pageSize, 
                         uint64_t lbaSize,
                         uint64_t key,
                         facebook::cachelib::util::PercentileStats& stats) {
+
+            if (size_ > 0) 
+                throw std::runtime_error(folly::sformat("load: data already loaded, cannot overwrite, size>0 \n"));
 
             lba_ = lba;
             size_ = size; 
@@ -118,24 +167,35 @@ class BlockRequest {
             }
 
             sLatTracker_ = new facebook::cachelib::util::LatencyTracker(stats);
-            startTime_ = std::chrono::system_clock::now();
         }
 
 
-        ~BlockRequest(){
+        void reset() {
+            if (size_ == 0) 
+                throw std::runtime_error(folly::sformat("reset(): data not loaded, size=0 \n"));
+
+            size_ = 0;
             delete sLatTracker_;
             if (cLatTracker_ != nullptr)
                 delete cLatTracker_;
+                cLatTracker_ = nullptr;
+
+            hitBytes_=0;
+            readAsyncCount_=0;
+            writeAsyncCount_=0;
+            readAsyncBytes_=0;
+            writeAsyncBytes_=0;
+            missKeyVec_.clear();
+        }
+
+
+        bool isDataLoaded() {
+            return size_>0; 
         }
 
 
         void startLatencyTracking(facebook::cachelib::util::PercentileStats& stats) {
             cLatTracker_ = new facebook::cachelib::util::LatencyTracker(stats);
-        }
-
-
-        void startClatTracking() {
-            cStartTime_ = std::chrono::system_clock::now();
         }
     
 
@@ -145,26 +205,8 @@ class BlockRequest {
             out.append(folly::sformat("Write Async: {},", writeAsyncBytes_));
             out.append(folly::sformat("Read async count: {},", readAsyncCount_));
             out.append(folly::sformat("Write async count: {},", writeAsyncCount_));
-            out.append(folly::sformat("Total IO: {},", totalIO_));
-
-            std::string iocbStr;
-            for (uint64_t i=0; i<iocbVec_.size(); i++) {
-                iocbStr.append(folly::sformat("{}-", iocbVec_.at(i)));
-            }
-            out.append(folly::sformat("IOCB: {}\n", iocbStr));
-        
+            out.append(folly::sformat("Total IO: {},", totalIO_));        
             return out; 
-        }
-
-
-        int getLatency() {
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now()-startTime_).count();
-            return duration; 
-        }
-
-        int getClat() {
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now()-cStartTime_).count();
-            return duration; 
         }
 
 
@@ -180,8 +222,6 @@ class BlockRequest {
                 uint64_t totalIOProcessed = hitBytes_+readAsyncBytes_;
                 if (totalIOProcessed > totalIO_) {
                     throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
-                    // std::cout<<folly::sformat("warning: Excess read -> {}\n", printStatus());
-                    // doneFlag = true;
                 } else if (totalIOProcessed == totalIO_) {
                     doneFlag = true; 
                 }
@@ -191,15 +231,10 @@ class BlockRequest {
                     doneFlag = true; 
                 } else if (totalIOProcessed > totalIO_) {
                     throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
-                    // std::cout<<folly::sformat("warning: Excess write -> {}\n", printStatus());
-                    // doneFlag = true; 
                 }
             } else {
                 throw std::runtime_error(folly::sformat("Unknown req isBlockProcessed()\n"));
             }
-
-            if (doneFlag)
-                endTime_ = std::chrono::system_clock::now();
 
             return doneFlag; 
         }
@@ -232,6 +267,10 @@ class BlockRequest {
 
         uint64_t getEndPage() {
             return endPage_;
+        }
+
+        uint64_t getPageCount() {
+            return endPage_ - startPage_ + 1;
         }
 
 
@@ -271,11 +310,6 @@ class BlockRequest {
         }
 
 
-        void trackIOCB(iocb* iocbPtr) {
-            iocbVec_.push_back(iocbPtr);
-        }
-
-
         void async(uint64_t size, bool writeFlag) {
             std::lock_guard<std::mutex> l(updateMutex_);
             assert(size<=totalIO_);
@@ -293,7 +327,7 @@ class BlockRequest {
 
     uint64_t key_;
     uint64_t lba_;
-    uint64_t size_;
+    uint64_t size_=0;
     uint64_t offset_;
     uint64_t pageSize_;
     uint64_t lbaSize_;
@@ -310,16 +344,9 @@ class BlockRequest {
     uint64_t writeAsyncBytes_=0;
 
     std::vector<uint64_t> missKeyVec_;
-    std::vector<iocb*> iocbVec_;
-
     mutable std::mutex updateMutex_;
     facebook::cachelib::util::LatencyTracker *sLatTracker_ = nullptr;
     facebook::cachelib::util::LatencyTracker *cLatTracker_ = nullptr;
-
-    std::chrono::system_clock::time_point startTime_;
-    std::chrono::system_clock::time_point cStartTime_;
-    std::chrono::system_clock::time_point endTime_;
-
 };
 
 }

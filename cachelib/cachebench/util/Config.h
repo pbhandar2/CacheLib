@@ -265,6 +265,7 @@ struct StressorConfig : public JSONConfig {
   uint64_t pageSizeBytes{4096};
   std::string diskFilePath{};
   bool relativeTiming{true};
+  double scaleIAT{1.0};
 
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);

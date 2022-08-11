@@ -95,10 +95,6 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
 
     cacheStats.blockRender(std::cout);
 
-    replayStats.renderPercentile(std::cout, 
-                                    "Percent Diff(Slat - Clat) (%)", 
-                                    stressor_->getLatDiffPercentile());
-
     tracker.stop();
     stressor_.reset();
     return true; 

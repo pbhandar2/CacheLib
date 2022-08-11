@@ -189,12 +189,6 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
                           totalReadBackingStoreIO+totalWriteBackingStoreIO,
                           backingStoreWriteIOPercent);
 
-
-  // out << folly::sformat("Read aligned block request count: {}\n", readAlignedCount);
-  // out << folly::sformat("Write aligned block request count: {}\n", writeAlignedCount);
-  // out << folly::sformat("Read misalignment count: {} \n", readMisalignmentCount);
-  // out << folly::sformat("Write misalignment count: {} \n", writeMisalignmentCount);
-  // out << folly::sformat("Total misalignment IO processed (bytes): {} \n", misalignmentBytes);
   // out << folly::sformat("Backing store read request count: {} \n", readBackingStoreReqCount);
   // out << folly::sformat("Backing store write request count: {} \n", writeBackingStoreReqCount);
   // out << folly::sformat("Backing store IO processed: {} \n", totalBackingStoreIO);

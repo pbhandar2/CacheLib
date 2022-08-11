@@ -249,10 +249,6 @@ class BlockCacheStressorBase {
   virtual util::PercentileStats* latBackingReadPercentile() const = 0;
   virtual util::PercentileStats* latBackingWritePercentile() const = 0;
 
-  virtual util::PercentileStats* getBlockReadSizePercentile() const = 0;
-  virtual util::PercentileStats* getBlockWriteSizePercentile() const = 0;
-  virtual util::PercentileStats* getLatDiffPercentile() const = 0;
-
 
  protected:
   // check whether the load test should stop. e.g. user interrupt the
