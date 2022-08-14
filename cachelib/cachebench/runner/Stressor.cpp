@@ -49,7 +49,6 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 
 BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
-
   // workload stats   
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
@@ -57,80 +56,31 @@ BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
   readReqBytes += other.readReqBytes;
   writeReqBytes += other.writeReqBytes;
 
-  maxPendingReq += other.maxPendingReq;
-
-
   // system stats 
-  readReqProcessCount += other.readReqProcessCount;
-  writeReqProcessCount += other.writeReqProcessCount;
+  experimentRuntime = std::max(other.experimentRuntime, experimentRuntime);
+  replayRuntime = std::max(other.replayRuntime, replayRuntime); 
 
-  maxInputQueueSize += other.maxInputQueueSize;
-  maxOutputQueueSize += other.maxOutputQueueSize;
-  maxPendingReq += other.maxPendingReq;
-  experimentRuntime += other.experimentRuntime;
-
-
-  blockReqProcessed += other.blockReqProcessed;
-  blockReqProcessing += other.blockReqProcessing;
-  totalBackingStoreIOReturned += other.totalBackingStoreIOReturned;
-
-  // total IO size (bytes) of different types of request 
-  reqBytes += other.reqBytes;
-
-
-  // total pages accessed 
-  readPageCount += other.readPageCount;
-  writePageCount += other.writePageCount;
-
-  // total IO processed by the cache system 
-  totalIOProcessed += other.totalIOProcessed;
-
-  blockReqCount += other.blockReqCount;
-
-  // stats on request alignment 
-  readMisalignmentCount += other.readMisalignmentCount;
-  writeMisalignmentCount += other.writeMisalignmentCount;
-  misalignmentBytes += other.misalignmentBytes;
-  writeAlignedCount += other.writeAlignedCount;
-  readAlignedCount += other.readAlignedCount;
-
-  // read and write page hit 
-  readPageHitCount += other.readPageHitCount;
-  writePageHitCount += other.writePageHitCount;
-
-  // read and write block request hit 
-  readBlockHitCount += other.readBlockHitCount;
-  readBlockPartialHitCount += other.readBlockPartialHitCount;
-  readBlockMissCount += other.readBlockMissCount;
-  writeMisalignmentHitCount += other.writeMisalignmentHitCount;
-  
-  // backing store request count 
-  readBackingStoreReqCount += other.readBackingStoreReqCount;
-  writeBackingStoreReqCount += other.writeBackingStoreReqCount;
-
-  // backing store IO processed 
-  totalBackingStoreIO += other.totalBackingStoreIO;
-  totalReadBackingStoreIO += other.totalReadBackingStoreIO;
-  totalWriteBackingStoreIO += other.totalWriteBackingStoreIO;
-
-  readBackingStoreFailureCount += other.readBackingStoreFailureCount;
-  writeBackingStoreFailureCount += other.writeBackingStoreFailureCount;
-
-  loadCount += other.loadCount;
+  maxPendingReq = std::max(other.maxPendingReq, maxPendingReq);
+  maxPendingIO = std::max(other.maxPendingIO, maxPendingIO);
   loadPageFailure += other.loadPageFailure;
 
-  readBlockRequestDropCount += other.readBlockRequestDropCount;
-  readBlockRequestDropBytes += other.readBlockRequestDropBytes;
-  writeBlockRequestDropCount += other.writeBlockRequestDropCount;
-  writeBlockRequestDropBytes += other.writeBlockRequestDropBytes;
+  maxInputQueueSize = std::max(other.maxInputQueueSize, maxInputQueueSize);
+  maxOutputQueueSize = std::max(other.maxOutputQueueSize, maxOutputQueueSize);
 
-  backingStoreRequestDropCount += other.backingStoreRequestDropCount;
+  readBlockReqProcessed += other.readBlockReqProcessed;
+  writeBlockReqProcessed += other.writeBlockReqProcessed;
+  readBlockIOProcessed += other.readBlockIOProcessed;
+  writeBlockIOProcessed += other.writeBlockIOProcessed;
 
-  maxPendingIO = std::max(other.maxPendingIO, maxPendingIO);
-  maxQueueSize = std::max(other.maxQueueSize, maxQueueSize); 
-  replayRuntime += other.replayRuntime; 
+  backingReadReqCount += other.backingReadReqCount; 
+  backingWriteReqCount += other.backingWriteReqCount;
+  backingReadIORequested += other.backingReadIORequested;
+  backingWriteIORequested += other.backingWriteIORequested;
 
-  
+  backingReadReqProcessed += other.backingReadReqProcessed;
+  backingWriteReqProcessed += other.backingWriteReqProcessed;
+  backingReadIOProcessed += other.backingReadIOProcessed;
+  backingWriteIOProcessed += other.backingWriteIOProcessed;
 
   return *this;
 }
@@ -146,84 +96,46 @@ void BlockReplayStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double replayElapsedSecs = replayRuntime / static_cast<double>(1e9);
   const double experimentRuntimeSecs = experimentRuntime / static_cast<double>(1e9);
   std::cout << "\n\n";
-  out << folly::sformat("Elasped(sec): {}, Replay: {}, Experiment: {}\n", elapsedSecs, replayElapsedSecs, experimentRuntimeSecs);
+  out << folly::sformat("totalTime_s={}\n", elapsedSecs);
+  out << folly::sformat("replayTime_s={}\n", replayElapsedSecs);
+  out << folly::sformat("experimentTime_s={}\n", experimentRuntimeSecs);
 
   // performance stats 
   auto readBandwidth = (experimentRuntimeSecs==0.0) ? 0.0 : readReqBytes/experimentRuntimeSecs;
   auto writeBandwidth = (experimentRuntimeSecs==0.0) ? 0.0 : writeReqBytes/experimentRuntimeSecs;
   auto bandwidth = (experimentRuntimeSecs==0.0) ? 0.0 : (readReqBytes+writeReqBytes)/experimentRuntimeSecs;
-  auto readIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : readPageCount/experimentRuntimeSecs;
-  auto writeIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : writePageCount/experimentRuntimeSecs;
-  auto overallIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : (readPageCount+writePageCount)/experimentRuntimeSecs;
-  auto blockReqIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : (readReqCount+writeReqCount)/experimentRuntimeSecs;
-  auto readBlockReqIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : readReqCount/experimentRuntimeSecs;
-  auto writeBlockReqIOPS = (experimentRuntimeSecs==0.0) ? 0.0 : writeReqCount/experimentRuntimeSecs;
 
-  out << folly::sformat("Bandwidth (bytes/sec): {:6.2f}, R:{:6.2f}, W:{:6.2f}\n", bandwidth, readBandwidth, writeBandwidth);
-  out << folly::sformat("Page IOPS (bytes/sec): {:6.2f}, R:{:6.2f}, W:{:6.2f}\n", overallIOPS, readIOPS, writeIOPS);
-  out << folly::sformat("Block request IOPS (bytes/sec): {:6.2f}, R:{:6.2f}, W:{:6.2f}\n", blockReqIOPS, readBlockReqIOPS, writeBlockReqIOPS);
-  out << folly::sformat("Max input queue size: {} \n", maxInputQueueSize);
-  out << folly::sformat("Max output queue size: {} \n", maxOutputQueueSize);
-  out << folly::sformat("Max pending IO: {}\n", maxPendingIO);
+  out << folly::sformat("bandwidth_byte/s={:6.2f}\n", bandwidth);
+  out << folly::sformat("readBandwidth_byte/s={:6.2f}\n", readBandwidth);
+  out << folly::sformat("writeBandwidth_byte/s={:6.2f}\n", writeBandwidth);
+  out << folly::sformat("maxBlockRequestQueue={}\n", maxInputQueueSize);
+  out << folly::sformat("maxAsyncIOCompletionQueue={}\n", maxOutputQueueSize);
+  out << folly::sformat("maxPendingIO={}\n", maxPendingIO);
+  out << folly::sformat("loadPageFailureCount={}\n", loadPageFailure);
 
-  // workload stats 
-  const double blockRequestSuccess = getPercent(blockReqProcessed, readReqCount+writeReqCount);
-  const double readBlockRequestSuccess = getPercent(readReqCount-readBlockRequestDropCount, readReqCount);
-  const double writeBlockRequestSuccess = getPercent(writeReqCount-writeBlockRequestDropCount, writeReqCount);
-  const double writeIOPercent = getPercent(writeReqBytes, readReqBytes+writeReqBytes);
-  const double backingStoreWritePercent = getPercent(writeBackingStoreReqCount, readBackingStoreReqCount+writeBackingStoreReqCount);
-  const double backingStoreWriteIOPercent = getPercent(totalWriteBackingStoreIO, totalReadBackingStoreIO+totalWriteBackingStoreIO);
-
-  // block request stats 
-  out << folly::sformat("Block request count: {}, Success: {:3.2f}% \n", readReqCount+writeReqCount, blockRequestSuccess);
-  out << folly::sformat("Read block request count: {}, Success: {:3.2f}% \n", readReqCount, readBlockRequestSuccess);
-  out << folly::sformat("Write block request count: {}, Success: {:3.2f}% \n", writeReqCount, writeBlockRequestSuccess);
-  out << folly::sformat("Total IO requested (bytes): {}, Write: {:3.2f}% \n", readReqBytes+writeReqBytes, writeIOPercent);
-
-  // backing store stats 
-  out << folly::sformat("Backing store request count: {}, Write: {:3.2f}% \n", 
-                          readBackingStoreReqCount+writeBackingStoreReqCount,
-                          backingStoreWritePercent);
-
-  out << folly::sformat("Backing store IO requested: {}, Write: {:3.2f}% \n", 
-                          totalReadBackingStoreIO+totalWriteBackingStoreIO,
-                          backingStoreWriteIOPercent);
-
-  // out << folly::sformat("Backing store read request count: {} \n", readBackingStoreReqCount);
-  // out << folly::sformat("Backing store write request count: {} \n", writeBackingStoreReqCount);
-  // out << folly::sformat("Backing store IO processed: {} \n", totalBackingStoreIO);
-  // out << folly::sformat("Backing store read IO processed: {} \n", totalReadBackingStoreIO);
-  // out << folly::sformat("Backing store write IO processed: {} \n", totalWriteBackingStoreIO);
-  // out << folly::sformat("Read page hit count: {} \n", readPageHitCount);
-  // out << folly::sformat("Read block request hit count: {} \n", readBlockHitCount);
-  // out << folly::sformat("Read block request miss count: {} \n", readBlockMissCount);
-  // out << folly::sformat("Read block request partial hit count: {} \n", readBlockPartialHitCount);
-  // out << folly::sformat("Write misalignment hit count: {} \n", writeMisalignmentHitCount);
-  // out << folly::sformat("Cache load page count: {} \n", loadCount);
-  // out << folly::sformat("Cache load page failure count: {} \n", loadPageFailure);
-
-  // const double readHitRatio = readPageHitCount/(double) readPageCount;
-  // if (readPageCount > 0)
-  //   out << folly::sformat("Read page hit rate: {:6.2f}\n", readHitRatio);
-  // else
-  //   out << folly::sformat("Read page hit rate: 0.0\n");
-
-
-  // out << folly::sformat("Max pending IO count: {}\n", maxPendingIO);
-  // out << folly::sformat("Max block request queue size: {}\n", maxQueueSize);
+  const double blockRequestSuccess = getPercent(readBlockReqProcessed+writeBlockReqProcessed, readReqCount+writeReqCount);
+  out << folly::sformat("blockReqCount={}\n", readReqCount+writeReqCount);
+  out << folly::sformat("blockReadReqCount={}\n", readReqCount);
+  out << folly::sformat("blockWriteReqCount={}\n", writeReqCount);
+  out << folly::sformat("blockRequestSuccess={:3.2f} \n", blockRequestSuccess);
+  out << folly::sformat("blockIORequested_byte={} \n", readReqBytes+writeReqBytes);
+  out << folly::sformat("blockIOProcessed_byte={} \n", readBlockIOProcessed+writeBlockIOProcessed);
   
+  out << folly::sformat("backingReqCount={}\n", backingReadReqCount+backingWriteReqCount);
+  out << folly::sformat("backingWriteReqCount={}\n", backingWriteReqCount);
+  out << folly::sformat("backingIORequested_byte={}\n", backingReadIORequested+backingWriteIORequested);
+  out << folly::sformat("backingIOProcessed_byte={} \n", backingReadIOProcessed+backingWriteIOProcessed);
+  out << folly::sformat("backingWriteIORequested_byte={}\n", backingWriteIORequested);
 
 }
 
 
-void BlockReplayStats::renderPercentile(std::ostream& out, folly::StringPiece describe, util::PercentileStats *stats) const {
-  auto printLatencies =
-      [&out](folly::StringPiece cat,
-              const util::PercentileStats::Estimates& latency) {
-        auto fmtLatency = [&out, &cat](folly::StringPiece pct,
-                                        double val) {
-          out << folly::sformat("{:20} {:8} : {:>10.2f}\n", cat, pct,
-                                val);
+void BlockReplayStats::renderPercentile(std::ostream& out, folly::StringPiece describe, folly::StringPiece unit, util::PercentileStats *stats) const {
+    auto printLatencies =
+        [&out](folly::StringPiece cat, folly::StringPiece unit,
+                const util::PercentileStats::Estimates& latency) {
+        auto fmtLatency = [&out, &cat, &unit](folly::StringPiece pct, uint64_t val) {
+            out << folly::sformat("{}_{}_{}={}\n", cat, pct, unit, val);
         };
 
         fmtLatency("avg", latency.avg);
@@ -244,7 +156,7 @@ void BlockReplayStats::renderPercentile(std::ostream& out, folly::StringPiece de
       };
 
   util::PercentileStats::Estimates est = stats->estimate();
-  printLatencies(describe, est);
+  printLatencies(describe, unit, est);
 
 }
 

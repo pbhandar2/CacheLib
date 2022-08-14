@@ -31,7 +31,7 @@ BlockRunner::BlockRunner(const CacheBenchConfig& config)
 bool BlockRunner::run(std::chrono::seconds progressInterval,
                         const std::string& progressStatsFile) {
     
-    std::cout << "Runner: BlockRunner \n";
+    std::cout << "runner:init,BlockRunner \n";
 
     BlockReplayProgressTracker tracker{*stressor_, progressStatsFile};
     stressor_->start();
@@ -41,61 +41,67 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
     }
 
     stressor_->finish();
+    tracker.stop();
+    // just to make sure the stat print thread and final output dont overlap 
     uint64_t durationNs = stressor_->getTestDurationNs();
     BlockReplayStats replayStats = stressor_->aggregateBlockReplayStats();
-
     auto cacheStats = stressor_->getCacheStats();
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     // render block replay statistics 
     replayStats.render(durationNs, std::cout);
-
     replayStats.renderPercentile(std::cout, 
-                                    "Block Read sLat (ns)", 
+                                    "blockReadSlat", 
+                                    "ns",
                                     stressor_->sLatBlockReadPercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Block Write sLat (ns)", 
+                                    "blockWriteSlat",
+                                    "ns", 
                                     stressor_->sLatBlockWritePercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Block Read cLat (ns)", 
+                                    "blockReadClat", 
+                                    "ns",
                                     stressor_->cLatBlockReadPercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Block Write cLat (ns)", 
+                                    "blockWriteClat",
+                                    "ns", 
                                     stressor_->cLatBlockWritePercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Backing Read Lat (ns)", 
+                                    "backingReadLat",
+                                    "ns", 
                                     stressor_->latBackingReadPercentile());
 
     replayStats.renderPercentile(std::cout, 
-                                    "Backing Write Lat (ns)", 
+                                    "backingWriteLat",
+                                    "ns", 
                                     stressor_->latBackingWritePercentile());
 
-    // replayStats.renderPercentile(std::cout, 
-    //                                 "Backing Store Write Latency Percentile", 
-    //                                 stressor_->getBackingStoreWriteLatencyPercentile());
+    replayStats.renderPercentile(std::cout, 
+                                    "backingReadSize",
+                                    "byte", 
+                                    stressor_->backingReadSizePercentile());
 
-    // replayStats.renderPercentile(std::cout,
-    //                                 "Read block request size",
-    //                                 stressor_->getBlockReadSizePercentile());
+    replayStats.renderPercentile(std::cout, 
+                                    "backingWriteSize",
+                                    "byte", 
+                                    stressor_->backingWriteSizePercentile());
 
-    // replayStats.renderPercentile(std::cout,
-    //                                 "Write block request size",
-    //                                 stressor_->getBlockWriteSizePercentile());
+    replayStats.renderPercentile(std::cout, 
+                                    "iatWaitDuration",
+                                    "us", 
+                                    stressor_->iatWaitDurationPercentile());
 
-    // replayStats.renderPercentile(std::cout,
-    //                                 "Block read latency",
-    //                                 stressor_->getBlockReadLatencyPercentile());
-
-    // replayStats.renderPercentile(std::cout,
-    //                                 "Block write latency",
-    //                                 stressor_->getBlockWriteLatencyPercentile());
-
+    replayStats.renderPercentile(std::cout, 
+                                    "loadDuration",
+                                    "us", 
+                                    stressor_->loadDurationPercentile());
     cacheStats.blockRender(std::cout);
-
-    tracker.stop();
+    std::cout << "runner:terminate,BlockRunner \n";
     stressor_.reset();
     return true; 
 }

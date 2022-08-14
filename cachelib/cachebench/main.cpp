@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
   }
 
   CacheBenchConfig config(FLAGS_json_test_config);
-  std::cout << "Welcome to OSS version of cachebench" << std::endl;
+  std::cout << "cachebench: MT cache" << std::endl;
 #endif
 
   try {

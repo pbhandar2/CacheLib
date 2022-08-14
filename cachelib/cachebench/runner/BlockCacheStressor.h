@@ -210,15 +210,33 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    util::PercentileStats* backingReadSizePercentile() const override {
+        return backingReadSizePercentile_;
+    }
+
+
+    util::PercentileStats* backingWriteSizePercentile() const override {
+        return backingWriteSizePercentile_;
+    }
+
+
+    util::PercentileStats* iatWaitDurationPercentile() const override {
+        return iatWaitDurationPercentile_;
+    }
+
+
+    util::PercentileStats* loadDurationPercentile() const override {
+        return loadDurationPercentile_;
+    }
+
+
     void printStatThread(BlockReplayStats& stats) {
-        std::cout << "thread:init,printStats \n";
         bool replayDoneFlag = isReplayDone();
         while ((!replayDoneFlag) || (pendingBlockRequestCount_ > 0)) {
             std::this_thread::sleep_for(std::chrono::seconds(config_.statPrintDelaySec));
             printCurrentStats(stats);
             replayDoneFlag = isReplayDone();
         }
-        std::cout << "thread:terminate,printStats \n";
     }
 
 
@@ -318,33 +336,65 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void printCurrentStats(BlockReplayStats& stats) {
         Stats cacheStats = cache_->getStats();
-        std::cout << "stat:";
+        std::cout << "\nstat:";
 
         const uint64_t numSeconds = getTestDurationNs()/static_cast<double>(1e9);
-        std::cout << folly::sformat("T={},",
-                                    numSeconds);
+        std::cout << folly::sformat("T={},", numSeconds);
+        {
+            const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
+            uint64_t blockReqCount = stats.readReqCount + stats.writeReqCount;
+            std::cout << folly::sformat("blockReqCount={},", blockReqCount);
+            std::cout << folly::sformat("pendingBlock={},", pendingBlockRequestCount_);
+            std::cout << folly::sformat("maxPendingBlock={},", stats.maxPendingReq);
+            std::cout << folly::sformat("maxPendingIO={},", stats.maxPendingIO);
+            std::cout << folly::sformat("readIOProcessed={},", stats.readBlockIOProcessed);
+            std::cout << folly::sformat("writeIOProcessed={},", stats.writeBlockIOProcessed);
 
-        uint64_t blockReqCount = stats.readReqCount + stats.writeReqCount;
-        std::cout << folly::sformat("BlockReqCount={}/{}/{},",
-                                        stats.blockReqProcessed,
-                                        pendingBlockRequestCount_,
-                                        blockReqCount);
+            auto readBandwidth = (numSeconds==0) ? 0 : stats.readBlockIOProcessed/numSeconds;
+            auto writeBandwidth = (numSeconds==0) ? 0 : stats.writeBlockIOProcessed/numSeconds;
+            auto bandwidth = (numSeconds==0) ? 0 : (stats.readBlockIOProcessed+stats.writeBlockIOProcessed)/numSeconds;
 
-        std::cout << folly::sformat("MaxInputQueueSize={},",
-                                        stats.maxInputQueueSize);
-
-        std::cout << folly::sformat("MaxOutputQueueSize={},",
-                                        stats.maxOutputQueueSize);
+            std::cout << folly::sformat("readBandwidth={},", readBandwidth);
+            std::cout << folly::sformat("writeBandwidth={},", writeBandwidth);       
+            std::cout << folly::sformat("overallBandwidth={},", bandwidth);        
+        }                         
         
-        std::cout << folly::sformat("MaxPendingBlock={},", stats.maxPendingReq);
-        std::cout << folly::sformat("MaxPendingIO={},",
-                                        stats.maxPendingIO);
-
         const uint64_t ramItemCount = cacheStats.getRAMItemCount();
-        std::cout << folly::sformat("t1Size={},", ramItemCount);
+        const uint64_t nvmItemCount = cacheStats.getNVMItemCount();
+        std::cout << folly::sformat("t1PageCount={},", ramItemCount);
+        std::cout << folly::sformat("t2PageCount={},", nvmItemCount);
         std::cout << folly::sformat("t1HitRate={:3.2f},",cacheStats.getHitRate());
-        std::cout << "\n\n";
+        std::cout << folly::sformat("t2HitRate={:3.2f},",cacheStats.getNVMHitRate());
 
+        std::ostream& out = std::cout;
+        auto printLatencies =
+            [&out](folly::StringPiece cat, folly::StringPiece unit,
+                    const util::PercentileStats::Estimates& latency) {
+            auto fmtLatency = [&out, &cat, &unit](folly::StringPiece pct, uint64_t val) {
+                out << folly::sformat("{}_{}_{}={},", cat, pct, unit, val);
+            };
+
+            fmtLatency("avg", latency.avg);
+            fmtLatency("p10", latency.p10);
+            fmtLatency("p25", latency.p25);
+            fmtLatency("p50", latency.p50);
+            fmtLatency("p75", latency.p75);
+            fmtLatency("p90", latency.p90);
+            fmtLatency("p95", latency.p95);
+            fmtLatency("p99", latency.p99);
+            fmtLatency("p999", latency.p999);
+            };
+        
+        // print all percentile data 
+        // sLat (read, write), cLat (read, write), backing store lat: (read, write)
+        printLatencies("blockReadSLat", "ns", sLatBlockReadPercentile_->estimate());
+        printLatencies("blockWriteSLat", "ns", sLatBlockWritePercentile_->estimate());
+        printLatencies("blockReadCLat", "ns", cLatBlockReadPercentile_->estimate());
+        printLatencies("blockWriteCLat", "ns", cLatBlockWritePercentile_->estimate());
+        printLatencies("backingReadLat", "ns", latBackingReadPercentile_->estimate());
+        printLatencies("backingWriteLat", "ns", latBackingWritePercentile_->estimate());
+        printLatencies("iatWaitDuration", "us", iatWaitDurationPercentile_->estimate());
+        printLatencies("loadDuration", "us", loadDurationPercentile_->estimate());
     }  
 
 
@@ -377,11 +427,10 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         timeout.tv_sec = 0;
         timeout.tv_nsec = 10; // 1us
         bool replayDoneFlag = isReplayDone();
-        while ((!replayDoneFlag) || (pendingBlockRequestCount_ > 0)) {
+        while ((!replayDoneFlag) || (pendingBlockRequestCount_ > 0) || (pendingIOCount_ > 0)) {
             int ret = io_getevents(*ctx_, 1, maxConcurrentIO, events, &timeout);
             if (ret > 0) {
                 for (int eindex=0; eindex<ret; eindex++) {
-                    stats.totalBackingStoreIOReturned++;
                     iocb *retiocb = events[eindex].obj;
                     uint64_t size = retiocb->u.v.nr;
                     uint64_t res = events[eindex].res;
@@ -392,24 +441,31 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     }
 
                     uint64_t index = findIOCBToAsyncMap(retiocb);
-                    if (op == 0)
+                    if (op == 0){
                         appendToBackingStoreReturnQueue(index, false);
-                    else
+                        stats.backingReadIOProcessed += size;
+                    }
+                    else {
                         appendToBackingStoreReturnQueue(index, true);
-
+                        stats.backingWriteIOProcessed += size;
+                    }
                 }
             }
             replayDoneFlag = isReplayDone();
         }
         delete [] events;
-        std::cout << "log: async IO tracker thread terminated \n";
     }
 
 
-    void removeBlockRequest(uint64_t index) {
+    void readBlockCacheHit(uint64_t index, uint64_t size, bool requestCompletedFlag, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
-        blockRequestVec_.at(index).reset();
-        pendingBlockRequestCount_--;
+        blockRequestVec_.at(index).hit(size);
+        if (requestCompletedFlag) {
+            stats.readBlockReqProcessed++;
+            stats.readBlockIOProcessed += blockRequestVec_.at(index).getSize();
+            blockRequestVec_.at(index).reset();
+            pendingBlockRequestCount_--;
+        } 
     }
 
 
@@ -433,11 +489,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                     loadKey(strkey, stats);
                 }
                 else {
-                    stats.readPageHitCount++;
                     cache_->recordAccess(strkey);
                 }
             } else if (op == OpType::kSet) {
-                stats.writePageCount++;
                 loadKey(strkey, stats);
             } else {
                 throw std::runtime_error(
@@ -456,8 +510,14 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         BlockRequest& req = blockRequestVec_.at(index);
         req.async(size, writeFlag);
         if (req.isBlockRequestProcessed()) {
-            stats.blockReqProcessed++;
             setKeys(req, stats);
+            if (writeFlag){
+                stats.writeBlockReqProcessed++;
+                stats.writeBlockIOProcessed += req.getSize();
+            } else {
+                stats.readBlockReqProcessed++;
+                stats.readBlockIOProcessed += req.getSize();
+            }
             blockRequestVec_.at(index).reset();
             pendingBlockRequestCount_--;
         }
@@ -465,7 +525,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
 
     void processCompletedRequest(BlockReplayStats& stats) {
-        std::cout << "thread:init,processCompletedRequest \n";
         bool replayDoneFlag = isReplayDone();
         while ((!replayDoneFlag) || (pendingBlockRequestCount_ > 0)) {
             std::pair<uint64_t, bool> backingReturnPair = popFromBackingStoreReturnQueue(stats);
@@ -480,7 +539,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             }
             replayDoneFlag = isReplayDone();
         }
-        std::cout << "thread:terminate,processCompletedRequest \n";
+        stats.experimentRuntime = getTestDurationNs();
     }
 
 
@@ -506,7 +565,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     uint64_t loadAsyncIORequest(uint64_t size, 
             uint64_t backingStoreAlignment, 
-            uint64_t blockRequestIndex) {
+            uint64_t blockRequestIndex,
+            BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(backingRequestMutex_);
         uint64_t loadIndex = maxConcurrentIO;
         for (uint64_t index=0; index<maxConcurrentIO; index++) {
@@ -519,6 +579,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                         folly::sformat("Error in posix_memalign, return: {}\n", ret));
                 }
                 pendingIOCount_++;
+                if (pendingIOCount_ > stats.maxPendingIO)
+                    stats.maxPendingIO = pendingIOCount_;
                 break;
             }
         }
@@ -528,32 +590,27 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doRead(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        stats.readBackingStoreReqCount++;
-        stats.totalReadBackingStoreIO+=size;
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index);
+        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index);
-        if (pendingIOCount_ > stats.maxPendingIO)
-            stats.maxPendingIO = pendingIOCount_;
+            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
         submitAsyncRead(asyncIOIndex, offset, size);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
-        // appendToBackingStoreReturnQueue(asyncIOIndex, false);
-
+        stats.backingReadReqCount++;
+        stats.backingReadIORequested += size; 
+        backingReadSizePercentile_->trackValue(size);
     }
 
 
     void doWrite(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        stats.writeBackingStoreReqCount++;
-        stats.totalWriteBackingStoreIO+=size;
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index);
+        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index);
-        if (pendingIOCount_ > stats.maxPendingIO)
-            stats.maxPendingIO = pendingIOCount_;
+            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
         submitAsyncWrite(asyncIOIndex, offset, size);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
-        // appendToBackingStoreReturnQueue(asyncIOIndex, true);
+        stats.backingWriteReqCount++;
+        stats.backingWriteIORequested += size; 
+        backingWriteSizePercentile_->trackValue(size);
     }
 
 
@@ -561,7 +618,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         uint64_t index = req.getKey();
         uint64_t offset = req.getOffset();
         uint64_t size = req.getSize();
-
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req);
 
         uint64_t cacheMissBytes = 0;
@@ -571,17 +627,11 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
         uint64_t reqTotalIO = req.getTotalIO();
         assert(reqTotalIO>=cacheMissBytes);
-
         if (cacheMissBytes == 0) {   
             // no miss all done 
-            stats.blockReqProcessed++;
-            removeBlockRequest(index);
+            readBlockCacheHit(index, reqTotalIO-cacheMissBytes, true, stats);
         } else {
-            // need to submit IOs to disk for cache misses 
-            req.hit(reqTotalIO-cacheMissBytes);
-            // AsyncIORequest *ioReq = new AsyncIORequest(cacheMissBytes, backingStoreAlignment, index);
-            // appendToOutputQueue(ioReq, false);
-                
+            readBlockCacheHit(index, reqTotalIO-cacheMissBytes, false, stats);
             for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
                 doRead(index, 
                         std::get<0>(miss), 
@@ -600,15 +650,27 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         if (frontMisalignment > 0) {
             uint64_t startPage = req.getStartPage();
             uint64_t startPageOffset = config_.pageSizeBytes*startPage;
-            doRead(index, startPageOffset, config_.pageSizeBytes, stats);
-        }
+            const std::string key = std::to_string(startPage);
+            auto it = cache_->find(key, AccessMode::kRead);
+            if (it == nullptr) {
+                doRead(index, startPageOffset, config_.pageSizeBytes, stats);
+            } else {
+                readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
+            }  
+        } 
             
         uint64_t rearMisalignment = req.getRearAlignment();
         if (rearMisalignment > 0) {
             uint64_t endPage = req.getEndPage();
             uint64_t endPageOffset = config_.pageSizeBytes*endPage;
-            doRead(index, endPageOffset, config_.pageSizeBytes, stats);
-        }
+            const std::string key = std::to_string(endPage);
+            auto it = cache_->find(key, AccessMode::kRead);
+            if (it == nullptr) {
+                doRead(index, endPageOffset, config_.pageSizeBytes, stats);
+            } else {
+                readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
+            }
+        } 
 
         doWrite(index, offset, size, stats);
     }
@@ -635,7 +697,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 pendingBlockRequestCount_++;
                 if (pendingBlockRequestCount_ > stats.maxPendingReq)
                     stats.maxPendingReq = pendingBlockRequestCount_;
-                stats.blockReqCount++;
 
                 const uint64_t lba = std::stoull(req.key);
                 const uint64_t size = *(req.sizeBegin);
@@ -715,6 +776,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             replayCompleted = isReplayDone();
             index = popFromBlockInputQueue();
         }
+        stats.experimentRuntime = getTestDurationNs();
     }
 
 
@@ -729,23 +791,25 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 	// @param stats       Throughput stats
     // @param fileIndex   The index used to map to resources of the file being replayed 
 	void stressByBlockReplay(BlockReplayStats& stats, uint64_t fileIndex) {
-        std::cout << "thread:init,replay \n";
 		std::mt19937_64 gen(folly::Random::rand64());
 		std::optional<uint64_t> lastRequestId = std::nullopt;            
         try {
             const Request& req(getReq(fileIndex, gen, lastRequestId)); 
             std::chrono::time_point<std::chrono::system_clock> lastSubmitTime = std::chrono::system_clock::now();
             std::chrono::time_point<std::chrono::system_clock> curTime; 
+            std::chrono::time_point<std::chrono::system_clock> reqStartTimePoint;
+            std::chrono::time_point<std::chrono::system_clock> postIATWaitTimePoint;
+            std::chrono::time_point<std::chrono::system_clock> loadCompleteTimePoint;
 
             uint64_t ts = req.getTs();
             double iat;
             traceStartTime_ = ts;
             tracePrevTime_ = ts;
             do {
+                reqStartTimePoint = std::chrono::system_clock::now();
                 ts = req.getTs();
                 iat = static_cast<double>((ts - tracePrevTime_))/config_.scaleIAT;
-
-                while (getBlockInputQueueSize()>0) {
+                while (pendingBlockRequestCount_>0) {
                     curTime = std::chrono::system_clock::now();
                     if (config_.relativeTiming) {
                         auto timeSinceLastSubmit = std::chrono::duration_cast<std::chrono::microseconds>(curTime - lastSubmitTime).count();
@@ -757,11 +821,18 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                             break;
                     }
                 }
-
+                postIATWaitTimePoint = std::chrono::system_clock::now();
+                auto iatWaitDuration = std::chrono::duration_cast<std::chrono::microseconds>(postIATWaitTimePoint-reqStartTimePoint).count();
+                iatWaitDurationPercentile_->trackValue(iatWaitDuration);
+                
                 uint64_t index = loadBlockRequest(req, stats);
                 while (index == config_.inputQueueSize) {
                     index = loadBlockRequest(req, stats);
                 }
+
+                loadCompleteTimePoint = std::chrono::system_clock::now();
+                auto loadDuration = std::chrono::duration_cast<std::chrono::microseconds>(loadCompleteTimePoint-postIATWaitTimePoint).count();
+                loadDurationPercentile_->trackValue(loadDuration);
                 
                 const Request& req(getReq(fileIndex, gen, lastRequestId)); 
                 lastSubmitTime = std::chrono::system_clock::now();
@@ -772,7 +843,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         wg_->markFinish();
         stats.replayRuntime = getTestDurationNs();
         replayDoneFlagVec_.at(fileIndex) = true;
-        std::cout << "thread:terminate,replay \n";
     }
 
 
@@ -818,8 +888,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     std::vector<BlockReplayStats> blockReplayStatVec_;
 
     // tracking percentile values 
-    util::PercentileStats *backingStoreReadSizeBytesPercentile_ = new util::PercentileStats();
-    util::PercentileStats *backingStoreWriteSizeBytesPercentile_ = new util::PercentileStats();
+    util::PercentileStats *backingReadSizePercentile_ = new util::PercentileStats();
+    util::PercentileStats *backingWriteSizePercentile_ = new util::PercentileStats();
 
     util::PercentileStats *sLatBlockReadPercentile_ = new util::PercentileStats();
     util::PercentileStats *sLatBlockWritePercentile_ = new util::PercentileStats();
@@ -829,6 +899,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     util::PercentileStats *latBackingReadPercentile_ = new util::PercentileStats();
     util::PercentileStats *latBackingWritePercentile_ = new util::PercentileStats();
+
+    util::PercentileStats *iatWaitDurationPercentile_ = new util::PercentileStats();
+    util::PercentileStats *loadDurationPercentile_ = new util::PercentileStats();
 
     // system data stuctures and its mutexes
     mutable std::mutex pendingBlockRequestMutex_;

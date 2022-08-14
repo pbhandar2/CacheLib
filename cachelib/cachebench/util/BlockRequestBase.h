@@ -226,7 +226,7 @@ class BlockRequest {
                     doneFlag = true; 
                 }
             } else if (op_ == OpType::kSet) {
-                uint64_t totalIOProcessed = writeAsyncBytes_+readAsyncBytes_;
+                uint64_t totalIOProcessed = hitBytes_+writeAsyncBytes_+readAsyncBytes_;
                 if (totalIOProcessed == totalIO_) {
                     doneFlag = true; 
                 } else if (totalIOProcessed > totalIO_) {

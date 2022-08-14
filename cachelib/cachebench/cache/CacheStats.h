@@ -131,6 +131,10 @@ struct Stats {
     return invertPctFn(totalMisses, numCacheGets);
   }
 
+  double getNVMHitRate() {
+    return invertPctFn(numNvmGetMiss, numNvmGets);
+  }
+
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
@@ -308,14 +312,13 @@ struct Stats {
     }
   }
 
-  void renderPercentile(std::ostream& out, folly::StringPiece describe, const util::PercentileStats::Estimates& est) const {
-    auto printLatencies =
-        [&out](folly::StringPiece cat,
-                const util::PercentileStats::Estimates& latency) {
-          auto fmtLatency = [&out, &cat](folly::StringPiece pct,
-                                          double val) {
-            out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
-                                  val);
+
+  void renderPercentile(std::ostream& out, folly::StringPiece describe, folly::StringPiece unit, const util::PercentileStats::Estimates& est) const {
+      auto printLatencies =
+          [&out](folly::StringPiece cat, folly::StringPiece unit,
+                  const util::PercentileStats::Estimates& latency) {
+          auto fmtLatency = [&out, &cat, &unit](folly::StringPiece pct, uint64_t val) {
+              out << folly::sformat("{}_{}_{}={}\n", cat, pct, unit, val);
           };
 
           fmtLatency("avg", latency.avg);
@@ -334,34 +337,32 @@ struct Stats {
           fmtLatency("p999999", latency.p999999);
           fmtLatency("p100", latency.p100);
         };
-    printLatencies(describe, est);
+    printLatencies(describe, unit, est);
+
   }
 
   void blockRender(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
-    const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
-
-    out << folly::sformat("Cache get count: {}\n", numCacheGets);
-    out << folly::sformat("T1 page count: {}\n", numItems);
-    out << folly::sformat("T1 hit rate: {:6.2f}\n", overallHitRatio);
-    out << folly::sformat("Allocation count: {}\n", allocAttempts);
-    out << folly::sformat("Allocation failure count: {}\n", allocFailures);
-    out << folly::sformat("T1 eviction count: {}\n", numEvictions);
-    
-    renderPercentile(out, "Allocate latency", cacheAllocateLatencyNs);
-
+    const double ramHitRatio = invertPctFn(numCacheGetMiss, numCacheGets);
     const double nvmHitRatio = invertPctFn(numNvmGetMiss, numNvmGets);
-    out << folly::sformat("T2 get count: {}\n", numNvmGets);
-    out << folly::sformat("T2 get coalesced: {}\n", numNvmGetCoalesced);
-    out << folly::sformat("T2 page count: {}\n", numNvmItems);
-    out << folly::sformat("T2 hit rate: {:6.2f}\n", nvmHitRatio);
-    out << folly::sformat("T2 put count: {}\n", numNvmPuts);
-    out << folly::sformat("T2 put error count: {}\n", numNvmPutErrs);
-    out << folly::sformat("T2 put abort due to inflight get count: {}\n", numNvmAbortedPutOnInflightGet);
-    out << folly::sformat("T2 clean evict count: {}\n", numNvmCleanEvict);
-    out << folly::sformat("T2 dirty evict count: {}\n", numNvmUncleanEvict);
-    out << folly::sformat("T2 evict count: {}\n", numNvmEvictions);
-    out << folly::sformat("T2 item removed set size: {}\n", numNvmItemRemovedSetSize);
+
+    out << folly::sformat("t1Size={}\n", numItems);
+    out << folly::sformat("t2Size={}\n", numNvmItems);
+    out << folly::sformat("t1GetCount={}\n", numCacheGets);
+    out << folly::sformat("t2GetCount={}\n", numNvmGets);
+    out << folly::sformat("t1HitRate={:6.2f}\n", ramHitRatio);
+    out << folly::sformat("t2HitRate={:6.2f}\n", nvmHitRatio);
+    out << folly::sformat("t1EvictionCount={}\n", numEvictions);
+    out << folly::sformat("t2EvictionCount={}\n", numNvmEvictions);
+    out << folly::sformat("t2PutCount={}\n", numNvmPuts);
+    out << folly::sformat("t2PutErrorCount={}\n", numNvmPutErrs);
+    out << folly::sformat("allocationCount={}\n", allocAttempts);
+    out << folly::sformat("allocationFailCount={}\n", allocFailures);
+    out << folly::sformat("getCoalescedT2={}\n", numNvmGetCoalesced);
+    out << folly::sformat("putAbortDueToInflighGet={}\n", numNvmAbortedPutOnInflightGet);
+    out << folly::sformat("cleanEvictCountT2={}\n", numNvmCleanEvict);
+    out << folly::sformat("dirtyEvictCountT2={}\n", numNvmUncleanEvict);
+    out << folly::sformat("itemRemoveSetSizeT2={}\n", numNvmItemRemovedSetSize);
 
     constexpr double GB = 1024.0 * 1024 * 1024;
     double appWriteAmp =
@@ -370,19 +371,21 @@ struct Stats {
     double devWriteAmp =
         pctFn(numNvmNandBytesWritten, numNvmBytesWritten) / 100.0;
 
-    out << folly::sformat("T2 bytes written: {}\n", numNvmBytesWritten);
-    out << folly::sformat("T2 NAND bytes written: {}\n", numNvmNandBytesWritten);
-    out << folly::sformat("T2 device write amplification: {:6.2f}\n", devWriteAmp);
-    out << folly::sformat("T2 logical bytes written: {}\n", numNvmLogicalBytesWritten);
-    out << folly::sformat("T2 app write amplification: {:6.2f}\n", appWriteAmp);
+    out << folly::sformat("t2WriteSize_byte={}\n", numNvmBytesWritten);
+    out << folly::sformat("t2NANDWriteSize_byte={}\n", numNvmNandBytesWritten);
+    out << folly::sformat("t2DevWriteAmp={:6.2f}\n", devWriteAmp);
+    out << folly::sformat("t2LogicalWriteSize_byte={}\n", numNvmLogicalBytesWritten);
+    out << folly::sformat("t2AppWriteAmp={:6.2f}\n", appWriteAmp);
 
-    folly::StringPiece readCat = "NVM Read  Latency";
-    folly::StringPiece writeCat = "NVM Write Latency";
+    renderPercentile(out, "allocLat", "ns", cacheAllocateLatencyNs);
+    renderPercentile(out, "findLat", "ns", cacheFindLatencyNs);
+
+    folly::StringPiece readCat = "t2ReadLat";
+    folly::StringPiece writeCat = "t2WriteLat";
     auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
                           double val) {
-      out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
+      out << folly::sformat("{}_{}_us={}\n", cat, pct, val);
     };
-    
     // navy device read percentiles 
     fmtLatency(readCat, "avg", nvmReadLatencyMicrosAvg);
     fmtLatency(readCat, "p0", nvmReadLatencyMicrosP0);

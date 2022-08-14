@@ -66,85 +66,31 @@ struct BlockReplayStats {
   uint64_t readReqBytes{0};
   uint64_t writeReqBytes{0};
 
-
   // system stats 
-  uint64_t readReqProcessCount{0};
-  uint64_t writeReqProcessCount{0};
+  uint64_t experimentRuntime{0};
+  uint64_t replayRuntime{0};
+
+  uint64_t maxPendingReq{0};
+  uint64_t maxPendingIO{0};
+  uint64_t loadPageFailure{0};
 
   uint64_t maxInputQueueSize{0};
   uint64_t maxOutputQueueSize{0};
-  uint64_t maxPendingReq{0};
-  uint64_t experimentRuntime{0};
-
-
-  // Block request counts from workload
-  uint64_t blockReqCount{0}; 
-
-
-  // Backing store requests submitted 
-  uint64_t totalBackingStoreIO{0};
-  uint64_t totalReadBackingStoreIO{0};
-  uint64_t totalWriteBackingStoreIO{0};
-
-  // Block request processed 
-  uint64_t blockReqProcessed{0};
-  uint64_t blockReqProcessing{0};
-  uint64_t totalBackingStoreIOReturned{0};
-
-  // Total IO processed 
-  uint64_t totalIOProcessed{0};
-
-  // IO size requested 
-  uint64_t reqBytes{0};
   
-  
+  uint64_t readBlockReqProcessed{0};
+  uint64_t writeBlockReqProcessed{0};
+  uint64_t readBlockIOProcessed{0};
+  uint64_t writeBlockIOProcessed{0};
 
+  uint64_t backingReadReqCount{0};
+  uint64_t backingWriteReqCount{0};
+  uint64_t backingReadIORequested{0};
+  uint64_t backingWriteIORequested{0};
 
-
-  uint64_t readMisalignmentCount{0};
-  uint64_t writeMisalignmentCount{0};
-  uint64_t misalignmentBytes{0};
-
-  uint64_t writeAlignedCount{0};
-  uint64_t readAlignedCount{0};
-
-  uint64_t readPageCount{0};
-  uint64_t readPageHitCount{0};
-
-  uint64_t readBlockHitCount{0};
-  uint64_t readBlockPartialHitCount{0};
-  uint64_t readBlockMissCount{0};
-  uint64_t writeMisalignmentHitCount{0};
-
-  uint64_t writePageCount{0};
-  uint64_t writePageHitCount{0};
-
-  uint64_t readBackingStoreReqCount{0};
-  uint64_t writeBackingStoreReqCount{0};
-
-
-
-  uint64_t readBackingStoreFailureCount{0};
-  uint64_t writeBackingStoreFailureCount{0};
-
-  // insert page into the cache 
-  uint64_t loadCount{0};
-  uint64_t loadPageFailure{0};
-
-  // block requests dropped 
-  uint64_t readBlockRequestDropCount{0};
-  uint64_t readBlockRequestDropBytes{0};
-  uint64_t writeBlockRequestDropCount{0};
-  uint64_t writeBlockRequestDropBytes{0};
-
-  // async IO request dropped due to being close to limit 
-  uint64_t backingStoreRequestDropCount{0};
-  uint64_t backingStoreFailure{0};
-
-  uint64_t maxPendingIO{0};
-  uint64_t maxQueueSize{0};
-  uint64_t replayRuntime{0};
-
+  uint64_t backingReadReqProcessed{0};
+  uint64_t backingWriteReqProcessed{0};
+  uint64_t backingReadIOProcessed{0};
+  uint64_t backingWriteIOProcessed{0};
 
   // operator overload to aggregate multiple instances of ThroughputStats, one
   // from each  thread
@@ -153,7 +99,7 @@ struct BlockReplayStats {
   // convenience method to print the final throughput and hit ratio to stdout.
   void render(uint64_t elapsedTimeNs, std::ostream& out) const;
 
-  void renderPercentile(std::ostream& out, folly::StringPiece describe, util::PercentileStats *stats) const;
+  void renderPercentile(std::ostream& out, folly::StringPiece describe, folly::StringPiece unit, util::PercentileStats *stats) const;
 };
 
 // forward declaration for the workload generator.
@@ -248,6 +194,10 @@ class BlockCacheStressorBase {
   virtual util::PercentileStats* sLatBlockWritePercentile() const = 0;
   virtual util::PercentileStats* latBackingReadPercentile() const = 0;
   virtual util::PercentileStats* latBackingWritePercentile() const = 0;
+  virtual util::PercentileStats* iatWaitDurationPercentile() const = 0;
+  virtual util::PercentileStats* loadDurationPercentile() const = 0;
+  virtual util::PercentileStats* backingReadSizePercentile() const = 0;
+  virtual util::PercentileStats* backingWriteSizePercentile() const = 0;
 
 
  protected:
