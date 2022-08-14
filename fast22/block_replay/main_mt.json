@@ -1,7 +1,15 @@
 {
     "cache_config": {
-        "cacheSizeMB": 1500,
-        "allocSizes": [4136]
+        "cacheSizeMB": 800,
+        "allocSizes": [4136],
+        "navySizeClasses": [],
+        "nvmCachePaths": [
+            "/users/pbhandar/flash/disk.file"
+        ],
+        "navyBigHashSizePct": 0,
+        "navyBlockSize": 4096,
+        "truncateItemToOriginalAllocSizeInNvm": true,
+        "nvmCacheSizeMB": 600
     },
     "test_config": {
         "populateItem": true,
@@ -21,3 +29,4 @@
         }
     }
 }
+

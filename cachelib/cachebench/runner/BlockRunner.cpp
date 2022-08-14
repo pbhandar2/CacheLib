@@ -31,8 +31,6 @@ BlockRunner::BlockRunner(const CacheBenchConfig& config)
 bool BlockRunner::run(std::chrono::seconds progressInterval,
                         const std::string& progressStatsFile) {
     
-    std::cout << "runner:init,BlockRunner \n";
-
     BlockReplayProgressTracker tracker{*stressor_, progressStatsFile};
     stressor_->start();
 
@@ -101,7 +99,6 @@ bool BlockRunner::run(std::chrono::seconds progressInterval,
                                     "us", 
                                     stressor_->loadDurationPercentile());
     cacheStats.blockRender(std::cout);
-    std::cout << "runner:terminate,BlockRunner \n";
     stressor_.reset();
     return true; 
 }
