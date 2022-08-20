@@ -1,0 +1,31 @@
+Output directory: /users/pbhandar/MTCacheData/data//cloudlab_a/w105
+Stat dump (/users/pbhandar/MTCacheData/data//cloudlab_a/w105/128_8_100_8538_0_0.dump) does not exist.
+RUN: 128 8 100 /users/pbhandar/w105.csv 8538 0 temp_config.json /users/pbhandar/MTCacheData/data//cloudlab_a/w105/128_8_100_8538_0_0.dump
+{
+    "cache_config": {
+        "cacheSizeMB": 8538,
+        "lruUpdateOnWrite": true,
+        "allocSizes": [
+            4136
+        ]
+    },
+    "test_config": {
+        "populateItem": true,
+        "generator": "multi-replay",
+        "numThreads": 1,
+        "inputQueueSize": 128,
+        "processorThreadCount": 8,
+        "asyncIOTrackerThreadCount": 8,
+        "traceBlockSizeBytes": 512,
+        "pageSizeBytes": 4096,
+        "statPrintDelaySec": 30,
+        "relativeTiming": true,
+        "scaleIAT": 100,
+        "diskFilePath": "/users/pbhandar/disk/disk.file",
+        "replayGeneratorConfig": {
+            "traceList": [
+                "/users/pbhandar/w105.csv"
+            ]
+        }
+    }
+}
