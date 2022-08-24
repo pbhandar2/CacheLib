@@ -25,9 +25,8 @@ In directory, CacheLib/fast22/experiment/, edit the following fields in mt_confi
 - diskFilePath: path to a large file in the backing storage 
 - nvmCachePaths: path to a large file in the NVM 
 
-Download a block trace and its corresponding reuse distance histogram file. 
 
-Sample:
+Download a block trace and its corresponding reuse distance histogram file. 
 
 w93 block trace: https://www.dropbox.com/s/lmd94hhuayota24/w93.csv?dl=0
 
