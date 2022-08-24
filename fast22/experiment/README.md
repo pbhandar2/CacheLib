@@ -4,6 +4,10 @@ Clone the block stressor repo
 
 git clone https://github.com/pbhandar2/CacheLib.git
 
+In the CacheLib directory
+
+./contrib/build.sh -j -d 
+
 Clone the data repo 
 
 git clone https://github.com/pbhandar2/MTCacheData.git
