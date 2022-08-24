@@ -1,5 +1,12 @@
 # Installation 
 
+Use setup.sh to setup a machine for run the experiments. 
+
+Setup a cloublab c220g1
+```
+    sudo ./setup.sh /dev/sdb /dev/sdc
+```
+
 > **Note**
 > In order to run MT experiments. You need a backing storage device and an NVM device. 
 
@@ -12,6 +19,8 @@ git clone https://github.com/pbhandar2/CacheLib.git
 cd CacheLib
 ./contrib/build.sh -j -d 
 ```
+
+# Setup
 
 Mount the backing storage and NVM device and create a large file on it. 
 ```
@@ -49,10 +58,12 @@ Run the basic set of experiments using the 'run_basic_experiment.sh' script.
 
 EXAMPLE 
 
+```
 ./run_basic_experiment.sh 
-- cloudlab_a 
-- /users/pbhandar/disk/disk.file 
-- /users/pbhandar/flash/disk.file 
-- /users/pbhandar/cp_traces/w66.csv 
-- /users/pbhandar/rd_hist_4k/w66.csv 
-- /users/pbhandar/MTCacheData/data 
+        cloudlab_a 
+        /users/pbhandar/disk/disk.file 
+        /users/pbhandar/flash/disk.file 
+        /users/pbhandar/cp_traces/w66.csv 
+        /users/pbhandar/rd_hist_4k/w66.csv 
+        /users/pbhandar/MTCacheData/data 
+```
