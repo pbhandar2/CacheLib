@@ -16,8 +16,8 @@ cd CacheLib
 Mount the backing storage and NVM device and create a large file on it. 
 ```
     echo "${BACKING_DIR} not mounted"
-    mkfs -t ext4 ${backing_store_path}
-    mount ${backing_store_path} ${BACKING_DIR}
+    mkfs -t ext4 ${backing_dev_path}
+    mount ${backing_dev_path} ${BACKING_DIR}
     echo "${BACKING_DIR} mounted, now creating file ${BACKING_DIR}/disk.file"
     dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
     chmod a+rwx ${BACKING_DIR}/disk.file

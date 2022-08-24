@@ -5,8 +5,11 @@
 #/ Usage: setup.sh [OPTIONS]... [ARGUMENTS]...
 #/ ARGUMENTS                            DESCRIPTION
 #/ -------------------------------------------------------------------------------------
-#/ backing_store_path                    Path to the backing storage  
-#/ nvm_store_path                        Path to NVM storage         
+#/ backing_dev_path                    Path to the backing storage  
+#/ nvm_dev_path                        Path to NVM storage   
+#/ block_trace_url                       URL to the block trace file 
+#/ rd_hist_file_url                      URL to the file containing the RD histogram   
+#/ workload_tag                          Tag to identify the workload     
 #/ 
 #/ OPTIONS
 #/   -h, --help
@@ -32,8 +35,8 @@ set -o pipefail
 # {{{ Variables
 
 readonly ARGUMENT_ARRAY=(
-    "backing_store_path",
-    "nvm_store_path")
+    "backing_dev_path",
+    "nvm_dev_path")
 
 readonly DESCRIPTION_ARRAY=(
     "Path to the backing storage"
@@ -57,10 +60,13 @@ readonly script_dir=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 
 main() {
-    backing_store_path=${1}
-    nvm_store_path=${2}
+    backing_dev_path=${1}
+    nvm_dev_path=${2}
+    block_trace_url=${3}
+    rd_hist_url=${4}
+    workload_id=${5}
 
-    setup_mounts ${backing_store_path} ${nvm_store_path}
+    setup_mounts ${backing_dev_path} ${nvm_dev_path}
     setup_cachelib 
     setup_mt_cache_data
 }
@@ -69,15 +75,15 @@ main() {
 # {{{ Helper functions
 
 setup_mounts() {
-    backing_store_path=${1}
-    nvm_store_path=${2}
+    backing_dev_path=${1}
+    nvm_dev_path=${2}
 
     if mountpoint -q ${BACKING_DIR}; then
         echo "${BACKING_DIR} already mounted"
     else
         echo "${BACKING_DIR} not mounted"
-        mkfs -t ext4 ${backing_store_path}
-        mount ${backing_store_path} ${BACKING_DIR}
+        mkfs -t ext4 ${backing_dev_path}
+        mount ${backing_dev_path} ${BACKING_DIR}
         echo "${BACKING_DIR} mounted, now creating file ${BACKING_DIR}/disk.file"
         dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
         chmod a+rwx ${BACKING_DIR}/disk.file
@@ -87,8 +93,8 @@ setup_mounts() {
         echo "${NVM_DIR} already mounted"
     else
         echo "${NVM_DIR} not mounted"
-        mkfs -t ext4 ${backing_store_path}
-        mount ${backing_store_path} ${NVM_DIR}
+        mkfs -t ext4 ${nvm_dev_path}
+        mount ${nvm_dev_path} ${NVM_DIR}
         echo "${NVM_DIR} mounted, now creating file ${NVM_DIR}/disk.file"
         dd if=/dev/urandom of=${NVM_DIR}/disk.file bs=1M count=200000 oflag=direct 
         chmod a+rwx ${NVM_DIR}/disk.file
@@ -99,10 +105,12 @@ setup_cachelib() {
     sudo apt-get update 
     sudo apt install libaio-dev 
     cd ~
-    git clone https://github.com/pbhandar2/CacheLib
+    if [ ! -d "${HOME}/CacheLib" ]; then
+        git clone https://github.com/pbhandar2/CacheLib
+    fi
     cd CacheLib 
     git checkout replay 
-    ./contrib/build.sh -j -d -S -O 
+    ./contrib/build.sh -j -d 
 }
 
 setup_mt_cache_data() {
