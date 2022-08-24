@@ -32,11 +32,12 @@ now you can run the basic experiment using the scirpt, run_basic_experiment.sh
 | output_dir | Path to the output directory |
 
 
-EXAMPLE \\
-./run_basic_experiment.sh \\
-                 cloudlab_a \\
-                 /users/pbhandar/disk/disk.file \\
-                 /users/pbhandar/flash/disk.file \\
-                 /users/pbhandar/cp_traces/w66.csv \\
-                 /users/pbhandar/rd_hist_4k/w66.csv \\
-                 /users/pbhandar/MTCacheData/data \\
+EXAMPLE 
+
+./run_basic_experiment.sh 
+                 cloudlab_a 
+                 /users/pbhandar/disk/disk.file 
+                 /users/pbhandar/flash/disk.file 
+                 /users/pbhandar/cp_traces/w66.csv 
+                 /users/pbhandar/rd_hist_4k/w66.csv 
+                 /users/pbhandar/MTCacheData/data 
