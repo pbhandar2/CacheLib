@@ -22,9 +22,9 @@ In directory, CacheLib/fast22/experiment/, edit the following fields in mt_confi
 - diskFilePath: path to a large file in the backing storage 
 - nvmCachePaths: path to a large file in the NVM 
 
-Download a block trace and its resultant reuse distance histogram files. 
+Download a block trace and its corresponding reuse distance histogram file. 
 
-now you can run the basic experiment using the scirpt, run_basic_experiment.sh 
+run_basic_experiment.sh runs the basic experiments. 
 
 | Argument  | Description |
 | ------------- | ------------- |
