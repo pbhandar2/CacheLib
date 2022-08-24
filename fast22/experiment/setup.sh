@@ -78,6 +78,7 @@ setup_mounts() {
         echo "${BACKING_DIR} not mounted"
         mkfs -t ext4 ${backing_store_path}
         mount ${backing_store_path} ${BACKING_DIR}
+        echo "${BACKING_DIR} mounted, now creating file ${BACKING_DIR}/disk.file"
         dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
         chmod a+rwx ${BACKING_DIR}/disk.file
     fi
@@ -88,6 +89,7 @@ setup_mounts() {
         echo "${NVM_DIR} not mounted"
         mkfs -t ext4 ${backing_store_path}
         mount ${backing_store_path} ${NVM_DIR}
+        echo "${NVM_DIR} mounted, now creating file ${NVM_DIR}/disk.file"
         dd if=/dev/urandom of=${NVM_DIR}/disk.file bs=1M count=200000 oflag=direct 
         chmod a+rwx ${NVM_DIR}/disk.file
     fi
