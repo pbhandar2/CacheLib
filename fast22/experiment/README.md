@@ -34,21 +34,21 @@ Mount the backing storage and NVM device and create a large file on it.
     chmod a+rwx ${BACKING_DIR}/disk.file
 ```
 
-## Configuration 
+# Configuration 
 
 In directory, CacheLib/fast22/experiment/, edit the following fields in mt_config_template.json and st_config_template.json. 
 - diskFilePath: path to a large file in the backing storage 
 - nvmCachePaths: path to a large file in the NVM 
 
 
-## Workload data  
+# Workload data  
 
 Download a block trace and its corresponding reuse distance histogram file. 
 - w93 block trace: https://www.dropbox.com/s/lmd94hhuayota24/w93.csv?dl=0
 - w93 RD histogram file: https://www.dropbox.com/s/uv6bhfgvpkrvz56/w93.csv?dl=0
 
 
-## BasicExperiment.v0  
+# BasicExperiment.v0  
 
 Run the basic set of experiments using the 'run_basic_experiment.sh' script. 
 
