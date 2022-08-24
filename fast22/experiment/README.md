@@ -1,19 +1,14 @@
 # Installation 
 
-Clone the block stressor repo 
-
-git clone https://github.com/pbhandar2/CacheLib.git
-
-In the CacheLib directory
-
-./contrib/build.sh -j -d 
-
-Clone the data repo 
-
+Clone the necessay repos 
+```
 git clone https://github.com/pbhandar2/MTCacheData.git
+git clone https://github.com/pbhandar2/CacheLib.git
+cd CacheLib
+./contrib/build.sh -j -d 
+```
 
-mount the backing storage device and create a large file
-mount the NVM device and create a large file
+Mount the backing storage and NVM device and create a large file on it. 
 ```
     echo "${BACKING_DIR} not mounted"
     mkfs -t ext4 ${backing_store_path}
