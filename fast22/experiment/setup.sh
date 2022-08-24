@@ -59,7 +59,7 @@ readonly script_dir=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 main() {
     backing_dev_path=${1}
     nvm_dev_path=${2}
-    
+
     setup_mounts ${backing_dev_path} ${nvm_dev_path}
     setup_cachelib 
     setup_mt_cache_data
@@ -98,7 +98,7 @@ setup_mounts() {
 setup_cachelib() {
     sudo apt-get update 
     sudo apt install libaio-dev 
-    cd ~
+    cd ${HOME}
     if [ ! -d "${HOME}/CacheLib" ]; then
         git clone https://github.com/pbhandar2/CacheLib
     fi
