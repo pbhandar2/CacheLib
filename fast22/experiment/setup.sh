@@ -6,10 +6,7 @@
 #/ ARGUMENTS                            DESCRIPTION
 #/ -------------------------------------------------------------------------------------
 #/ backing_dev_path                    Path to the backing storage  
-#/ nvm_dev_path                        Path to NVM storage   
-#/ block_trace_url                       URL to the block trace file 
-#/ rd_hist_file_url                      URL to the file containing the RD histogram   
-#/ workload_tag                          Tag to identify the workload     
+#/ nvm_dev_path                        Path to NVM storage       
 #/ 
 #/ OPTIONS
 #/   -h, --help
@@ -62,10 +59,7 @@ readonly script_dir=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 main() {
     backing_dev_path=${1}
     nvm_dev_path=${2}
-    block_trace_url=${3}
-    rd_hist_url=${4}
-    workload_id=${5}
-
+    
     setup_mounts ${backing_dev_path} ${nvm_dev_path}
     setup_cachelib 
     setup_mt_cache_data
