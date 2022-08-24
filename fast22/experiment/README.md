@@ -27,13 +27,11 @@ In directory, CacheLib/fast22/experiment/, edit the following fields in mt_confi
 
 
 Download a block trace and its corresponding reuse distance histogram file. 
-
-w93 block trace: https://www.dropbox.com/s/lmd94hhuayota24/w93.csv?dl=0
-
-w93 RD histogram file: https://www.dropbox.com/s/uv6bhfgvpkrvz56/w93.csv?dl=0
+- w93 block trace: https://www.dropbox.com/s/lmd94hhuayota24/w93.csv?dl=0
+- w93 RD histogram file: https://www.dropbox.com/s/uv6bhfgvpkrvz56/w93.csv?dl=0
 
 
-Run the basic cache configurations using the 'run_basic_experiment.sh' script. 
+Run the basic set of experiments using the 'run_basic_experiment.sh' script. 
 
 | Argument  | Description |
 | ------------- | ------------- |
@@ -50,9 +48,9 @@ Run the basic cache configurations using the 'run_basic_experiment.sh' script.
 EXAMPLE 
 
 ./run_basic_experiment.sh 
-                 cloudlab_a 
-                 /users/pbhandar/disk/disk.file 
-                 /users/pbhandar/flash/disk.file 
-                 /users/pbhandar/cp_traces/w66.csv 
-                 /users/pbhandar/rd_hist_4k/w66.csv 
-                 /users/pbhandar/MTCacheData/data 
+- cloudlab_a 
+- /users/pbhandar/disk/disk.file 
+- /users/pbhandar/flash/disk.file 
+- /users/pbhandar/cp_traces/w66.csv 
+- /users/pbhandar/rd_hist_4k/w66.csv 
+- /users/pbhandar/MTCacheData/data 
