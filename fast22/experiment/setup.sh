@@ -61,6 +61,8 @@ main() {
     nvm_store_path=${2}
 
     setup_mounts ${backing_store_path} ${nvm_store_path}
+    setup_cachelib 
+    setup_mt_cache_data
 }
 
 
@@ -73,29 +75,44 @@ setup_mounts() {
     if mountpoint -q ${BACKING_DIR}; then
         echo "${BACKING_DIR} already mounted"
     else
+        echo "${BACKING_DIR} not mounted"
         mkfs -t ext4 ${backing_store_path}
         mount ${backing_store_path} ${BACKING_DIR}
+        dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
+        chmod a+rwx ${BACKING_DIR}/disk.file
     fi
 
     if mountpoint -q ${NVM_DIR}; then
         echo "${NVM_DIR} already mounted"
     else
+        echo "${NVM_DIR} not mounted"
         mkfs -t ext4 ${backing_store_path}
         mount ${backing_store_path} ${NVM_DIR}
+        dd if=/dev/urandom of=${NVM_DIR}/disk.file bs=1M count=200000 oflag=direct 
+        chmod a+rwx ${NVM_DIR}/disk.file
     fi
 }
+
+setup_cachelib() {
+    sudo apt-get update 
+    sudo apt install libaio-dev 
+    cd ~
+    git clone https://github.com/pbhandar2/CacheLib
+    cd CacheLib 
+    git checkout replay 
+    ./contrib/build.sh -j -d -S -O 
+}
+
+setup_mt_cache_data() {
+    cd ~
+    git clone https://github.com/pbhandar2/MTCacheData
+}
+
 # }}}
 
 main "${@}"
 
 
-
-# download CacheLib 
-# install libaio 
-# download MTCacheData 
-# create the disk file 
-# create the flash file 
-# set the proper permission for disk and flash file 
 # download the necessary trace 
 # download the necessary rd hist file 
 # set the proper permission for trace and rd hist file 
