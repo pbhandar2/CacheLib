@@ -24,6 +24,10 @@ In directory, CacheLib/fast22/experiment/, edit the following fields in mt_confi
 
 Download a block trace and its corresponding reuse distance histogram file. 
 
+Sample:
+w93 block trace: https://www.dropbox.com/s/lmd94hhuayota24/w93.csv?dl=0
+w93 RD histogram file: https://www.dropbox.com/s/uv6bhfgvpkrvz56/w93.csv?dl=0
+
 run_basic_experiment.sh runs the basic experiments. 
 
 | Argument  | Description |
