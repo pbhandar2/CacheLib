@@ -1,5 +1,8 @@
 # Installation 
 
+> **Note**
+> In order to run MT experiments. You need a backing storage device and an NVM device. 
+
 Clone the necessay repos 
 ```
 git clone https://github.com/pbhandar2/MTCacheData.git
