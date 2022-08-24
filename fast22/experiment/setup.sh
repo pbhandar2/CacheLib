@@ -115,7 +115,9 @@ setup_cachelib() {
 
 setup_mt_cache_data() {
     cd ~
-    git clone https://github.com/pbhandar2/MTCacheData
+    if [ ! -d "${HOME}/MTCacheData" ]; then
+        git clone https://github.com/pbhandar2/MTCacheData
+    fi
 }
 
 # }}}
