@@ -8,8 +8,11 @@ Clone the data repo
 
 git clone https://github.com/pbhandar2/MTCacheData.git
 
-mount the backing storage device 
-mount the NVM device 
+mount the backing storage device and create a large file
+mount the NVM device and create a large file
+
+# Example large file creation of size 500GB 
+dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
 
 go to Cachelib/fast22/experiments/
 
