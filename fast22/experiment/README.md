@@ -20,9 +20,8 @@ edit mt_config_template.json and st_config_template.json
 
 now you can run the basic experiment using the scirpt, run_basic_experiment.sh 
 
-Usage: run_basic_experiment.sh [OPTIONS]... [ARGUMENTS]...
-ARGUMENTS                            DESCRIPTION
--------------------------------------------------------------------------------------
+Arguments for the script:
+
 machine_id                           Machine identifier
 disk_file_path                       Path to file on disk  
 nvm_file_path                        Path to file on NVM
