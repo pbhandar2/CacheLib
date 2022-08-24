@@ -3,8 +3,10 @@
 > **Note**
 > In order to run MT experiments. You need a backing storage device and an NVM device. 
 
-Clone the necessay repos 
+Clone the repos and install libaio-dev. 
 ```
+sudo apt-get update 
+sudo apt install libaio-dev 
 git clone https://github.com/pbhandar2/MTCacheData.git
 git clone https://github.com/pbhandar2/CacheLib.git
 cd CacheLib
