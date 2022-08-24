@@ -14,7 +14,14 @@ git clone https://github.com/pbhandar2/MTCacheData.git
 
 mount the backing storage device and create a large file
 mount the NVM device and create a large file
-
+```
+    echo "${BACKING_DIR} not mounted"
+    mkfs -t ext4 ${backing_store_path}
+    mount ${backing_store_path} ${BACKING_DIR}
+    echo "${BACKING_DIR} mounted, now creating file ${BACKING_DIR}/disk.file"
+    dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
+    chmod a+rwx ${BACKING_DIR}/disk.file
+```
 ### Example large file creation of size 500GB 
 dd if=/dev/urandom of=${BACKING_DIR}/disk.file bs=1M count=500000 oflag=direct 
 
