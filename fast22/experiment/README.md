@@ -3,7 +3,7 @@
 > **Note**
 > In order to run MT experiments. You need a backing storage device and an NVM device. 
 
-## Auto
+## Automatic Install 
 
 Use setup.sh to setup a machine for run the experiments. 
 
@@ -12,7 +12,7 @@ Setup a cloublab c220g1
     sudo ./setup.sh /dev/sdb /dev/sdc
 ```
 
-## Manual 
+## Manual Install
 
 Clone the repos and install libaio-dev. 
 ```
