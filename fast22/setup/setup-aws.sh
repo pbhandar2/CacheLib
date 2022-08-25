@@ -9,9 +9,22 @@ set -o nounset
 set -o pipefail
 # }}}
 
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
+AWS_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+AWS_INSTALL_ZIP="${HOME}/awscliv2.zip"
+INSTALL_DIR="${HOME}/aws"
+
+if [[ ! -f ${AWS_INSTALL_ZIP} ]]; then 
+    rm -rf ${AWS_INSTALL_ZIP}
+fi 
+if [[ ! -d ${INSTALL_DIR} ]]; then 
+    rm -rf ${INSTALL_DIR}
+fi 
+
+curl ${AWS_URL} -o ${AWS_INSTALL_ZIP}
+unzip ${AWS_INSTALL_ZIP} -d ${INSTALL_DIR}
+sudo "${INSTALL_DIR}/install" --update
+rm -rf ${AWS_INSTALL_ZIP}
+
 
 aws_access_key=${1}
 aws_secret=${2}
