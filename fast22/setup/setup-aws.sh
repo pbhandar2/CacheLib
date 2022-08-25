@@ -26,6 +26,7 @@ sudo "${INSTALL_DIR}/aws/install" --update
 rm -rf ${AWS_INSTALL_ZIP}
 rm -rf "${INSTALL_DIR}/aws"
 
+sudo apt-get update
 sudo apt install -y python3-pip 
 pip3 install boto3 pandas numpy 
 
