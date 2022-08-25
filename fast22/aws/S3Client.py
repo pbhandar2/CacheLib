@@ -12,14 +12,14 @@ class S3Client:
         try:
             self.s3.download_file(bucket, key, file_path)
         except ClientError as e:
-            logging.error(e)
+            logging.error("Error: {} in download".format(e))
 
 
     def upload(self, bucket, key, file_path):
         try:
             response = self.s3.upload_file(file_path, bucket, key)
         except ClientError as e:
-            logging.error(e)
+            logging.error("Error: {} in upload".format(e))
 
     
     def check(self, bucket, key):
