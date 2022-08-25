@@ -5,7 +5,7 @@
         "lruUpdateOnWrite": true, 
         "navySizeClasses": [],
         "nvmCachePaths": [
-            "/users/pbhandar/flash/disk.file"
+            "/users/pbhandar/nvm/disk.file"
         ],
         "navyBigHashSizePct": 0,
         "navyBlockSize": 4096,
