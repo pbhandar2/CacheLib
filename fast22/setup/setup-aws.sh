@@ -9,6 +9,10 @@ set -o nounset
 set -o pipefail
 # }}}
 
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
 aws_access_key=${1}
 aws_secret=${2}
 
