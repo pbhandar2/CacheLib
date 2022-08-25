@@ -1,3 +1,5 @@
+#! /usr/bin/env bash
+
 # {{{ Bash settings
 # abort on nonzero exitstatus
 set -o errexit
