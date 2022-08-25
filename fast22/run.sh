@@ -154,7 +154,7 @@ run_unit_experiment() {
 
     python3 ./aws/s3_upload.py ${output_key} ${TEMP_OUT}
 
-    echo "Experiment Done!"
+    echo "Experiment Done! Key: ${output_key}"
 }
 
 

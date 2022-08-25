@@ -55,6 +55,8 @@ def generate_t1_t2_file(rd_hist_file_path, t1_hr_array, t2_hr_array, output_path
             key_count = s3.list_objects_v2(Bucket='mtcachedata', Prefix=final_key)['KeyCount']
             if key_count == 0:
                 f.write("{},{}\n".format(str(t1_size), str(t2_size)))
+            else:
+                print("Key {} already exists. Count: {}".format(final_key, key_count))
 
 
 if __name__ == "__main__":
