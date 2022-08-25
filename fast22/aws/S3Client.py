@@ -1,4 +1,6 @@
 import boto3 
+import logging 
+from botocore.exceptions import ClientError
 
 
 class S3Client:
@@ -7,9 +9,18 @@ class S3Client:
 
     
     def download(self, bucket, key, file_path):
-        self.s3.download_file(bucket, key, file_path)
+        try:
+            self.s3.download_file(bucket, key, file_path)
+        except ClientError as e:
+            logging.error(e)
 
 
     def upload(self, bucket, key, file_path):
-        # upload a file 
-        pass 
+        try:
+            response = self.s3.upload_file(file_path, bucket, key)
+        except ClientError as e:
+            logging.error(e)
+
+    
+    def check(self, bucket, key):
+        return s3.list_objects_v2(Bucket=bucket, Prefix=key)['KeyCount']
