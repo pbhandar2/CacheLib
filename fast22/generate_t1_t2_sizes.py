@@ -41,6 +41,8 @@ def generate_all_possible_t1_t2_sizes(rd_hist_file_path, t1_hr_array, t2_hr_arra
                     t2_size_mb = int(math.ceil((np.argmax(read_hit_rate>=t1_hr+t2_hr) - t1_size_mb)*PAGE_SIZE/(1e6)))
                     if t2_size_mb >= MIN_T2_SIZE_MB and t2_size_mb <= MAX_T2_SIZE_MB:
                         t1_t2_array.append([t1_size_mb, t2_size_mb])
+        else:
+            print("Dropped tier size with tier 1 size {}".format(t1_size_mb))
     return t1_t2_array
 
 
