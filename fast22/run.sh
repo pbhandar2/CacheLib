@@ -167,6 +167,10 @@ run_basic_experiment() {
     block_trace_path=${6}
     rd_hist_file_path=${7}
  
+    t1_size=0
+    t2_size=0
+    experiment_count=0
+
     output_key_base="output/${machine_id}/${workload_id}"
     for queue_size in ${POSSIBLE_QUEUE_SIZE_ARRAY[@]}
     do
@@ -174,9 +178,6 @@ run_basic_experiment() {
         do 
             for iat_scale_factor in ${POSSIBLE_IAT_SCALE_FACTOR_ARRAY[@]}
             do 
-                t1_size=0
-                t2_size=0
-                experiment_count=0
                 output_sub_key="${output_key_base}/${queue_size}_${thread_count}_${iat_scale_factor}"
                 # generate t1,t2 size combinations from the hit rate 
                 python3 generate_t1_t2_sizes.py \
@@ -217,7 +218,7 @@ run_basic_experiment() {
 
         echo "Running ${output_key}"
 
-        run_base_experiment ${queue_size} \
+        run_unit_experiment ${queue_size} \
                                 ${thread_count} \
                                 ${iat_scale_factor} \
                                 ${block_trace_path} \
