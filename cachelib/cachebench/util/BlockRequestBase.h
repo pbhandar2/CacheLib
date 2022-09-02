@@ -14,29 +14,9 @@ namespace cachelib {
 namespace cachebench {
 
 
-//  Operations that the block cache stressor supports
-//  They translate into the following cachelib operations
-//  Write: allocate + insertOrReplace
-//  Read: find
-//  Remove: remove
-enum class BlockOpType {
-  kWrite = 0,
-  kRead,
-  kRemove
-};
-
-
-enum class BlockOpResultType {
-  kNop = 0,
-  kReadMiss,
-  kReadHit,
-  kLoadSuccess,
-  kLoadFailure
-};
-
-
 struct AsyncIORequest {
     AsyncIORequest() {}
+
 
     ~AsyncIORequest() {
         if (size_ > 0) {
@@ -46,29 +26,26 @@ struct AsyncIORequest {
         }
     }
 
-    void loader(uint64_t size,             uint64_t asyncIOIndex,
-            uint64_t blockRequestIndex) {
-        size_ = size;
-        asyncIOIndex_ = asyncIOIndex;
-        blockRequestIndex_ = blockRequestIndex;  
-    }
 
-    void load(uint64_t requestSize, 
-            uint64_t backingStoreAlign, 
-            uint64_t asyncIOIndex,
-            uint64_t blockRequestIndex) { 
-
+    // load an async IO request made to disk 
+    void load(uint64_t offset, uint64_t size, bool writeFlag, uint64_t asyncIOIndex, uint64_t blockRequestIndex) { 
+        // when the load is called it should always be when size = 0 (no data is set)
+        // should not be overwriting the object 
         if (size_ > 0) 
             throw std::runtime_error(folly::sformat("load: data already loaded in async request, cannot overwrite, size>0 \n"));
 
-        size_ = requestSize;
+        offset_ = offset; 
+        size_ = size;
         asyncIOIndex_ = asyncIOIndex;
-        blockRequestIndex_ = blockRequestIndex;       
+        blockRequestIndex_ = blockRequestIndex;   
+        writeFlag_ = writeFlag;    
         iocbPtr_ = new iocb();
     }
 
 
+    // async IO has been completed, reset 
     void reset() {
+        // should not be reseting an empty object 
         if (size_ == 0) 
             throw std::runtime_error(folly::sformat("reset(): data not loaded in async request, size=0 \n"));
         
@@ -87,12 +64,22 @@ struct AsyncIORequest {
 
 
     bool isDataLoaded() {
-        return size_>0; 
+        return size_ > 0; 
     }
 
 
     uint64_t getSize() {
         return size_;
+    }
+
+
+    uint64_t getOffset() {
+        return offset_;
+    }
+
+
+    uint64_t getWriteFlag() {
+        return writeFlag_;
     }
 
 
@@ -106,10 +93,12 @@ struct AsyncIORequest {
     }
 
 
-    iocb *iocbPtr_;
+    uint64_t size_ = 0;
     uint64_t blockRequestIndex_;
     uint64_t asyncIOIndex_;
-    uint64_t size_=0;
+    uint64_t offset_;
+    bool writeFlag_;
+    iocb *iocbPtr_;
     facebook::cachelib::util::LatencyTracker *tracker_ = nullptr;
 };
 
@@ -131,13 +120,14 @@ class BlockRequest {
 
 
         void load(uint64_t lba, 
-                        uint64_t size, 
-                        OpType op, 
-                        uint64_t pageSize, 
-                        uint64_t lbaSize,
-                        uint64_t key,
-                        facebook::cachelib::util::PercentileStats& stats) {
-
+                    uint64_t size, 
+                    OpType op, 
+                    uint64_t pageSize, 
+                    uint64_t lbaSize,
+                    uint64_t key,
+                    facebook::cachelib::util::PercentileStats& stats) {
+            // when the load is called it should always be when size = 0 (no data is set)
+            // should not be overwriting the object 
             if (size_ > 0) 
                 throw std::runtime_error(folly::sformat("load: data already loaded, cannot overwrite, size>0 \n"));
 
@@ -171,6 +161,7 @@ class BlockRequest {
 
 
         void reset() {
+            // should not be reseting an empty object 
             if (size_ == 0) 
                 throw std::runtime_error(folly::sformat("reset(): data not loaded, size=0 \n"));
 

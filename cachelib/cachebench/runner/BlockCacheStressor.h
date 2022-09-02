@@ -563,7 +563,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    uint64_t loadAsyncIORequest(uint64_t size, 
+    uint64_t loadAsyncIORequest(uint64_t offset, uint64_t size, bool writeFlag, 
             uint64_t backingStoreAlignment, 
             uint64_t blockRequestIndex,
             BlockReplayStats& stats) {
@@ -572,7 +572,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         for (uint64_t index=0; index<maxConcurrentIO; index++) {
             if (!backingRequestVec_.at(index).isDataLoaded()) {
                 loadIndex = index; 
-                backingRequestVec_.at(index).load(size, backingStoreAlignment, index, blockRequestIndex);
+                backingRequestVec_.at(index).load(offset, size, writeFlag, index, blockRequestIndex);
                 int ret = posix_memalign((void **)&bufferVec_.at(index), backingStoreAlignment, size);
                 if (ret != 0) {
                     throw std::runtime_error(
@@ -590,9 +590,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doRead(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+        uint64_t asyncIOIndex = loadAsyncIORequest(offset, size, false, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+            asyncIOIndex = loadAsyncIORequest(offset, size, false, backingStoreAlignment, index, stats);
         submitAsyncRead(asyncIOIndex, offset, size);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
         stats.backingReadReqCount++;
@@ -603,9 +603,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doWrite(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+        uint64_t asyncIOIndex = loadAsyncIORequest(offset, size, true, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+            asyncIOIndex = loadAsyncIORequest(offset, size, true, backingStoreAlignment, index, stats);
         submitAsyncWrite(asyncIOIndex, offset, size);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
         stats.backingWriteReqCount++;
