@@ -290,6 +290,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 // if there were previous misses not tracked yet 
                 // add it to the vector of cache misses and reset size 
                 if (size > 0) {
+                    req.addCacheMissByteRange(offset, size, false);
                     cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
                     size = 0;
                 }
@@ -297,8 +298,11 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         }
         // if there were previous misses not tracked yet 
         // add it to the vector of cache misses 
-        if (size > 0) 
+        if (size > 0) {
+            req.addCacheMissByteRange(offset, size, false);
             cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
+        }
+            
         
         return cacheMissVec;
     }

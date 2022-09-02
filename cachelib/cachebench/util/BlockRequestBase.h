@@ -116,6 +116,8 @@ class BlockRequest {
                     cLatTracker_ = nullptr;
                 }
             }
+            missKeyVec_.clear();
+            missByteRangeVec_.clear();
         }
 
 
@@ -177,6 +179,9 @@ class BlockRequest {
             readAsyncBytes_=0;
             writeAsyncBytes_=0;
             missKeyVec_.clear();
+            missByteRangeVec_.clear();
+            totalMissByte_ = 0;
+            missCount_ = 0;
         }
 
 
@@ -312,8 +317,19 @@ class BlockRequest {
                 readAsyncCount_++;
             }
         }
+
+        void addCacheMissByteRange(uint64_t offset, uint64_t size, bool writeFlag) {
+            // std::lock_guard<std::mutex> l(updateMutex_);
+            missByteRangeVec_.push_back(std::make_tuple(offset, size, writeFlag, false));
+            totalMissByte_ += size; 
+            missCount_++;
+        }
     
-    
+
+    std::vector<std::tuple<uint64_t, uint64_t, bool, bool>> missByteRangeVec_;
+    uint64_t totalMissByte_ = 0;
+    uint64_t missCount_ = 0;
+
     OpType op_;
 
     uint64_t key_;
