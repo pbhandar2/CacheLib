@@ -264,23 +264,12 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    // void addMissByteRange(BlockRequest& req, uint64_t offset, uint64_t size, bool writeFlag) {
-    //     uint64_t alignedOffset = offset; 
-    //     uint64_t alignedSize = size;
-
-    //     if (offset % backingStoreAlignment > 0) {
-    //         // request is not aligned 
-    //         alignedOffset = offset - (offset % lbaSize_);
-    //     }
-    // }
-
-
     const std::vector<std::tuple<uint64_t, uint64_t>> getMissByteRange(BlockRequest& req) {
         uint64_t size = 0;
         uint64_t offset = 0;
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec;
+        // iterate over each page and check if its in the cache 
         for (uint64_t curPage=req.getStartPage(); curPage <= req.getEndPage(); curPage++) {
-
             const std::string key = std::to_string(curPage);
             auto it = cache_->find(key, AccessMode::kRead);
             if (it == nullptr) {
@@ -502,6 +491,11 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
+    void removeKey() {
+
+    }
+
+
     void removeAsyncIORequest(uint64_t index) {
         const std::lock_guard<std::mutex> l(backingRequestMutex_);
         backingRequestVec_.at(index).reset();
@@ -608,6 +602,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                                     uint64_t backingStoreAlignment, 
                                     uint64_t blockRequestIndex,
                                     BlockReplayStats& stats) {
+
         const std::lock_guard<std::mutex> l(backingRequestMutex_);
         uint64_t loadIndex = maxConcurrentIO;
         for (uint64_t index=0; index<maxConcurrentIO; index++) {
@@ -747,6 +742,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             uint64_t startPage = req.getStartPage();
             uint64_t startPageOffset = config_.pageSizeBytes * startPage;
             if (isPageInCache(startPage)) {
+                // remove the key since the data is stale
+                const std::string key = std::to_string(startPage);
+                cache_->remove(key);
                 readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
             } else {
                 req.addCacheMissByteRange(startPageOffset, config_.pageSizeBytes, false);
@@ -762,6 +760,9 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             uint64_t endPage = req.getEndPage();
             uint64_t endPageOffset = config_.pageSizeBytes*endPage;
             if (isPageInCache(endPage)) {
+                // remove the key since the data is stale
+                const std::string key = std::to_string(endPage);
+                cache_->remove(key);
                 readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
             } else {
                 req.addCacheMissByteRange(endPageOffset, config_.pageSizeBytes, false);
