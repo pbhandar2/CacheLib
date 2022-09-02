@@ -14,29 +14,9 @@ namespace cachelib {
 namespace cachebench {
 
 
-//  Operations that the block cache stressor supports
-//  They translate into the following cachelib operations
-//  Write: allocate + insertOrReplace
-//  Read: find
-//  Remove: remove
-enum class BlockOpType {
-  kWrite = 0,
-  kRead,
-  kRemove
-};
-
-
-enum class BlockOpResultType {
-  kNop = 0,
-  kReadMiss,
-  kReadHit,
-  kLoadSuccess,
-  kLoadFailure
-};
-
-
 struct AsyncIORequest {
     AsyncIORequest() {}
+
 
     ~AsyncIORequest() {
         if (size_ > 0) {
@@ -46,28 +26,22 @@ struct AsyncIORequest {
         }
     }
 
-    void loader(uint64_t size,             uint64_t asyncIOIndex,
-            uint64_t blockRequestIndex) {
-        size_ = size;
-        asyncIOIndex_ = asyncIOIndex;
-        blockRequestIndex_ = blockRequestIndex;  
-    }
 
-    void load(uint64_t requestSize, 
-            uint64_t backingStoreAlign, 
-            uint64_t asyncIOIndex,
-            uint64_t blockRequestIndex) { 
-
+    // load an async IO request made to disk 
+    void load(uint64_t offset, uint64_t size, bool writeFlag, uint64_t asyncIOIndex, uint64_t blockRequestIndex) { 
         if (size_ > 0) 
             throw std::runtime_error(folly::sformat("load: data already loaded in async request, cannot overwrite, size>0 \n"));
 
-        size_ = requestSize;
+        offset_ = offset; 
+        size_ = size;
         asyncIOIndex_ = asyncIOIndex;
-        blockRequestIndex_ = blockRequestIndex;       
+        blockRequestIndex_ = blockRequestIndex;   
+        writeFlag_ = writeFlag;    
         iocbPtr_ = new iocb();
     }
 
 
+    // async IO has been completed, reset 
     void reset() {
         if (size_ == 0) 
             throw std::runtime_error(folly::sformat("reset(): data not loaded in async request, size=0 \n"));
@@ -87,12 +61,22 @@ struct AsyncIORequest {
 
 
     bool isDataLoaded() {
-        return size_>0; 
+        return size_ > 0; 
     }
 
 
     uint64_t getSize() {
         return size_;
+    }
+
+
+    uint64_t getOffset() {
+        return offset_;
+    }
+
+
+    uint64_t getWriteFlag() {
+        return writeFlag_;
     }
 
 
@@ -106,10 +90,12 @@ struct AsyncIORequest {
     }
 
 
-    iocb *iocbPtr_;
+    uint64_t size_ = 0;
     uint64_t blockRequestIndex_;
     uint64_t asyncIOIndex_;
-    uint64_t size_=0;
+    uint64_t offset_;
+    bool writeFlag_;
+    iocb *iocbPtr_;
     facebook::cachelib::util::LatencyTracker *tracker_ = nullptr;
 };
 
@@ -160,7 +146,7 @@ class BlockRequest {
                 totalIO_ = size_;
                 if (frontAlignment_>0)
                     totalIO_ += pageSize_;
-                if (rearAlignment_>0)
+                if ((rearAlignment_ > 0) && ((getPageCount() > 1) || (frontAlignment_ == 0)))
                     totalIO_ += pageSize_;
             } else {
                 throw std::runtime_error(folly::sformat("Unknown req in BlockRequest\n"));
@@ -180,12 +166,16 @@ class BlockRequest {
                 delete cLatTracker_;
                 cLatTracker_ = nullptr;
 
-            hitBytes_=0;
-            readAsyncCount_=0;
-            writeAsyncCount_=0;
-            readAsyncBytes_=0;
-            writeAsyncBytes_=0;
+            hitBytes_ = 0;
+            readAsyncCount_ = 0;
+            writeAsyncCount_ = 0;
+            readAsyncBytes_ = 0;
+            writeAsyncBytes_ = 0;
+            totalMissByte_ = 0;
+            missCount_ = 0;
+
             missKeyVec_.clear();
+            missByteRangeVec_.clear();
         }
 
 
@@ -205,7 +195,8 @@ class BlockRequest {
             out.append(folly::sformat("Write Async: {},", writeAsyncBytes_));
             out.append(folly::sformat("Read async count: {},", readAsyncCount_));
             out.append(folly::sformat("Write async count: {},", writeAsyncCount_));
-            out.append(folly::sformat("Total IO: {},", totalIO_));        
+            out.append(folly::sformat("Hit: {},", hitBytes_));   
+            out.append(folly::sformat("Miss count: {}", missCount_));       
             return out; 
         }
 
@@ -217,27 +208,46 @@ class BlockRequest {
 
         bool isBlockRequestProcessed() {
             std::lock_guard<std::mutex> l(updateMutex_);
-            bool doneFlag = false; 
-            if (op_ == OpType::kGet) {
-                uint64_t totalIOProcessed = hitBytes_+readAsyncBytes_;
-                if (totalIOProcessed > totalIO_) {
-                    throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
-                } else if (totalIOProcessed == totalIO_) {
-                    doneFlag = true; 
-                }
-            } else if (op_ == OpType::kSet) {
-                uint64_t totalIOProcessed = hitBytes_+writeAsyncBytes_+readAsyncBytes_;
-                if (totalIOProcessed == totalIO_) {
-                    doneFlag = true; 
-                } else if (totalIOProcessed > totalIO_) {
-                    throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
-                }
-            } else {
-                throw std::runtime_error(folly::sformat("Unknown req isBlockProcessed()\n"));
+            bool doneFlag = true; 
+            for (auto missByteRange : missByteRangeVec_) {
+                if (std::get<3>(missByteRange) == false) {
+                    doneFlag = false; 
+                    break;
+                }   
             }
-
             return doneFlag; 
         }
+
+
+        // bool isBlockRequestProcessed() {
+        //     std::lock_guard<std::mutex> l(updateMutex_);
+        //     bool doneFlag = false; 
+        //     if (op_ == OpType::kGet) {
+        //         uint64_t totalIOProcessed = hitBytes_+readAsyncBytes_;
+        //         if (totalIOProcessed > totalIO_) {
+        //             throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
+        //         } else if (totalIOProcessed == totalIO_) {
+        //             doneFlag = true; 
+        //         }
+        //     } else if (op_ == OpType::kSet) {
+        //         uint64_t totalIOProcessed = hitBytes_+writeAsyncBytes_+readAsyncBytes_;
+        //         if (totalIOProcessed == totalIO_) {
+        //             doneFlag = true; 
+        //         } else if (totalIOProcessed > totalIO_) {
+        //             throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
+        //         }
+        //     } else {
+        //         throw std::runtime_error(folly::sformat("Unknown req isBlockProcessed()\n"));
+        //     }
+
+        //     if (missCount_ == returnCount_) {
+        //         if (!doneFlag) {
+        //             throw std::runtime_error(folly::sformat("Should be done but isn't \n"));
+        //         }
+        //     }
+
+        //     return doneFlag; 
+        // }
 
 
         uint64_t getTotalIO() {
@@ -310,19 +320,107 @@ class BlockRequest {
         }
 
 
-        void async(uint64_t size, bool writeFlag) {
+        void asyncReturn(iocb* iocbPtr, uint64_t asyncOffset, uint64_t asyncSize, bool writeFlag) {
             std::lock_guard<std::mutex> l(updateMutex_);
-            assert(size<=totalIO_);
+            bool found = false; 
+            uint64_t asyncEndOffset = asyncOffset + asyncSize;
+            // find the async IO to which it belongs by iterating over missing byte ranges 
+            for (uint64_t missIndex=0; missIndex < missCount_; missIndex++) {
+                // get the start and end offset of the current miss byte range 
+                auto curMissByteRange = missByteRangeVec_.at(missIndex);
+                uint64_t missByteRangeStartOffset = std::get<0>(curMissByteRange);
+                uint64_t missByteRangeSize = std::get<1>(curMissByteRange);
+                uint64_t missByteRangeWriteFlag = std::get<2>(curMissByteRange);
+                uint64_t missByteRangeEndOffset = missByteRangeStartOffset + missByteRangeSize;
+                 
+                // an async IO can larger than the miss byte range dur to alignment issues 
+                // for an async IO to belong to a paritcular miss byte range, the miss byte range has to be contained in async IO
+                // the start offset and end offset of the miss byte range must be between start and end offset of async IO 
+                bool missWriteFlag = std::get<2>(missByteRangeVec_.at(missIndex));
+                if ((asyncOffset <= missByteRangeStartOffset) && (asyncEndOffset >= missByteRangeEndOffset) && (missByteRangeWriteFlag == writeFlag)) {
+                    found = true; 
+                    // async IO found 
+                    // check to make sure this IO has not returned already 
+                    if (std::get<3>(missByteRangeVec_.at(missIndex)) == true) {
+                        throw std::runtime_error(folly::sformat("IO already returned! \n {} \n", printStatus()));
+                    }
+                    std::get<3>(missByteRangeVec_.at(missIndex)) = true; 
+                    break;
+                }
+            }
+
+            if (!found)
+                throw std::runtime_error(folly::sformat("Could not find miss byte range corresponding to this asycn IO! \n {} \n", printStatus()));
+
             if (writeFlag) {
-                writeAsyncBytes_ += size;
+                writeAsyncBytes_ += asyncSize;
                 writeAsyncCount_++;
             } else {
-                readAsyncBytes_ += size;
+                readAsyncBytes_ += asyncSize;
                 readAsyncCount_++;
             }
         }
+
+
+        void addCacheMissByteRange(uint64_t offset, uint64_t size, bool writeFlag) {
+            std::lock_guard<std::mutex> l(updateMutex_);
+            missByteRangeVec_.push_back(std::make_tuple(offset, size, writeFlag, false));
+            totalMissByte_ += size; 
+            missCount_++;
+        }
+
+
+        std::vector<std::tuple<uint64_t, uint64_t, bool, bool>> getMissByteRangeVec() {
+            return missByteRangeVec_;
+        }
+
+
+        std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO() {
+            std::lock_guard<std::mutex> l(updateMutex_);
+            std::vector<std::tuple<uint64_t, uint64_t, bool>> asyncIOVec;
+            // get all async IO request to be submitted for each cache miss / write request 
+            for (auto missByteRangeEntry : missByteRangeVec_) {
+                
+                // write requests should always be offset aligned 
+                // read request can be not offset aligned and extra can be read for it,
+                // but extra cannot be written for 
+                uint64_t offset = std::get<0>(missByteRangeEntry);
+                uint64_t alignedOffset = offset - (offset % lbaSize_);
+
+                // we need to read extra bytes because page start offset is not a multiple 
+                // of backing store alignment 
+                uint64_t offsetGap = offset - alignedOffset;
+                uint64_t size = std::get<1>(missByteRangeEntry);
+                uint64_t totalSize = offsetGap + size;
+
+                // request size should also be a multiple of backing store alignment 
+                uint64_t alignedSize = (totalSize + lbaSize_) - ((totalSize + lbaSize_) % lbaSize_);
+                if (((totalSize + lbaSize_) % lbaSize_) == 0)
+                    alignedSize = totalSize;
+                
+                // make sure both offset and size are aligned 
+                if ((alignedOffset % lbaSize_ > 0) || (alignedSize % lbaSize_ > 0)) {
+                    throw std::runtime_error(folly::sformat("offset and/or size not aligned."));
+                }
+
+                bool writeFlag = std::get<2>(missByteRangeEntry);
+                auto asyncIOEntry = std::make_tuple(alignedOffset, alignedSize, writeFlag);
+                asyncIOVec.push_back(asyncIOEntry);
+            }
+            return asyncIOVec;
+        }
     
     
+    std::vector<std::tuple<uint64_t, uint64_t, bool, bool>> missByteRangeVec_;
+    uint64_t totalMissByte_ = 0;
+    uint64_t missCount_ = 0;
+    uint64_t hitBytes_=0;
+    uint64_t readAsyncCount_=0;
+    uint64_t writeAsyncCount_=0;
+    uint64_t readAsyncBytes_=0;
+    uint64_t writeAsyncBytes_=0;
+
+
     OpType op_;
 
     uint64_t key_;
@@ -336,12 +434,6 @@ class BlockRequest {
     uint64_t totalIO_;
     uint64_t frontAlignment_;
     uint64_t rearAlignment_;
-    
-    uint64_t hitBytes_=0;
-    uint64_t readAsyncCount_=0;
-    uint64_t writeAsyncCount_=0;
-    uint64_t readAsyncBytes_=0;
-    uint64_t writeAsyncBytes_=0;
 
     std::vector<uint64_t> missKeyVec_;
     mutable std::mutex updateMutex_;

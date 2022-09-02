@@ -264,13 +264,22 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    const std::vector<std::tuple<uint64_t, uint64_t>> getCacheMiss(BlockRequest& req) {
+    // void addMissByteRange(BlockRequest& req, uint64_t offset, uint64_t size, bool writeFlag) {
+    //     uint64_t alignedOffset = offset; 
+    //     uint64_t alignedSize = size;
+
+    //     if (offset % backingStoreAlignment > 0) {
+    //         // request is not aligned 
+    //         alignedOffset = offset - (offset % lbaSize_);
+    //     }
+    // }
+
+
+    const std::vector<std::tuple<uint64_t, uint64_t>> getMissByteRange(BlockRequest& req) {
         uint64_t size = 0;
         uint64_t offset = 0;
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec;
-        for (uint64_t curPage=req.getStartPage(); 
-                curPage<=req.getEndPage(); 
-                curPage++) {
+        for (uint64_t curPage=req.getStartPage(); curPage <= req.getEndPage(); curPage++) {
 
             const std::string key = std::to_string(curPage);
             auto it = cache_->find(key, AccessMode::kRead);
@@ -290,6 +299,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                 // if there were previous misses not tracked yet 
                 // add it to the vector of cache misses and reset size 
                 if (size > 0) {
+                    req.addCacheMissByteRange(offset, size, false);
                     cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
                     size = 0;
                 }
@@ -297,20 +307,22 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         }
         // if there were previous misses not tracked yet 
         // add it to the vector of cache misses 
-        if (size > 0) 
+        if (size > 0) {
+            req.addCacheMissByteRange(offset, size, false);
             cacheMissVec.push_back(std::tuple<uint64_t, uint64_t>(offset, size));
-        
+        }
+            
         return cacheMissVec;
     }
 
 
-    void submitAsyncRead(uint64_t index, uint64_t offset, uint64_t size) {
+    void submitAsyncRead(uint64_t index) {
         backingRequestVec_.at(index).startLatencyTracking(*latBackingReadPercentile_);
         io_prep_pread(backingRequestVec_.at(index).iocbPtr_,
             backingStoreFileHandle_,
             (void*) bufferVec_.at(index),
-            size,
-            offset);
+            backingRequestVec_.at(index).getSize(),
+            backingRequestVec_.at(index).getOffset());
         int ret = io_submit(*ctx_, 1, &backingRequestVec_.at(index).iocbPtr_);
         if (ret < 1) {
             throw std::runtime_error(
@@ -319,13 +331,13 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    void submitAsyncWrite(uint64_t index, uint64_t offset, uint64_t size) {
+    void submitAsyncWrite(uint64_t index) {
         backingRequestVec_.at(index).startLatencyTracking(*latBackingWritePercentile_);
         io_prep_pwrite(backingRequestVec_.at(index).iocbPtr_,
             backingStoreFileHandle_,
             (void*) bufferVec_.at(index),
-            size,
-            offset);
+            backingRequestVec_.at(index).getSize(),
+            backingRequestVec_.at(index).getOffset());
         int ret = io_submit(*ctx_, 1, &backingRequestVec_.at(index).iocbPtr_);
         if (ret < 1) {
             throw std::runtime_error(
@@ -432,21 +444,42 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             if (ret > 0) {
                 for (int eindex=0; eindex<ret; eindex++) {
                     iocb *retiocb = events[eindex].obj;
+
+                    // property of the async IO that completed 
                     uint64_t size = retiocb->u.v.nr;
-                    uint64_t res = events[eindex].res;
+                    uint64_t offset = retiocb->u.v.offset;
                     short op = retiocb->aio_lio_opcode;
 
+                    // the result of async IO 
+                    uint64_t res = events[eindex].res;
                     if (size != res) {
                         throw std::runtime_error(folly::sformat("Size: {} Return {} Op {}\n", size, res, op));
                     }
 
+                    // find the async IO request key 
                     uint64_t index = findIOCBToAsyncMap(retiocb);
-                    if (op == 0){
-                        appendToBackingStoreReturnQueue(index, false);
+
+                    if (offset != backingRequestVec_.at(index).getOffset()) {
+                        throw std::runtime_error(folly::sformat("Offset->Requested={}, Return={}\n", offset, backingRequestVec_.at(index).getOffset()));
+                    }
+
+                    if (size != backingRequestVec_.at(index).getSize()) {
+                        throw std::runtime_error(folly::sformat("Size->Requested={}, Return={}\n", size, backingRequestVec_.at(index).getSize()));
+                    }
+
+                    if (op == 0) {
+                        if (backingRequestVec_.at(index).getWriteFlag()) {
+                            throw std::runtime_error(folly::sformat("Op->Requested=Write,Return=Read\n"));
+                        }
+                        appendToBackingStoreReturnQueue(index);
                         stats.backingReadIOProcessed += size;
                     }
                     else {
-                        appendToBackingStoreReturnQueue(index, true);
+                        if (!backingRequestVec_.at(index).getWriteFlag()) {
+                            throw std::runtime_error(folly::sformat("Op->Requested=Read,Return=Write\n"));
+                        }
+
+                        appendToBackingStoreReturnQueue(index);
                         stats.backingWriteIOProcessed += size;
                     }
                 }
@@ -506,9 +539,10 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    void updateAsyncCompletion(uint64_t index, uint64_t size, bool writeFlag, BlockReplayStats& stats, iocb* iocbPtr) {
+    void updateAsyncCompletion(uint64_t index, uint64_t offset, uint64_t size, bool writeFlag, BlockReplayStats& stats, iocb* iocbPtr) {
+        // const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
         BlockRequest& req = blockRequestVec_.at(index);
-        req.async(size, writeFlag);
+        req.asyncReturn(iocbPtr, offset, size, writeFlag);
         if (req.isBlockRequestProcessed()) {
             setKeys(req, stats);
             if (writeFlag){
@@ -527,14 +561,19 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     void processCompletedRequest(BlockReplayStats& stats) {
         bool replayDoneFlag = isReplayDone();
         while ((!replayDoneFlag) || (pendingBlockRequestCount_ > 0)) {
-            std::pair<uint64_t, bool> backingReturnPair = popFromBackingStoreReturnQueue(stats);
-            uint64_t index = std::get<0>(backingReturnPair);
-            bool writeFlag = std::get<1>(backingReturnPair);
+            uint64_t index = popFromBackingStoreReturnQueue(stats);
             if (index < maxConcurrentIO) {
                 uint64_t blockRequestIndex = backingRequestVec_.at(index).getBlockRequestIndex();
                 uint64_t size = backingRequestVec_.at(index).getSize();
+                uint64_t offset = backingRequestVec_.at(index).getOffset();
+                bool writeFlag = backingRequestVec_.at(index).getWriteFlag();
                 const std::lock_guard<std::mutex> l(pendingBlockRequestMutex_);
-                updateAsyncCompletion(blockRequestIndex, size, writeFlag, stats, backingRequestVec_.at(index).iocbPtr_);
+                updateAsyncCompletion(blockRequestIndex, 
+                                        offset,
+                                        size, 
+                                        writeFlag, 
+                                        stats, 
+                                        backingRequestVec_.at(index).iocbPtr_);
                 removeAsyncIORequest(index);
             }
             replayDoneFlag = isReplayDone();
@@ -543,36 +582,38 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    std::pair<uint64_t, bool> popFromBackingStoreReturnQueue(BlockReplayStats& stats) {
+    uint64_t popFromBackingStoreReturnQueue(BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(backingStoreReturnQueueMutex_);
-        std::pair<uint64_t, bool> outPair = std::make_pair(maxConcurrentIO, false);
+        uint64_t index = maxConcurrentIO;
         uint64_t queueSize = backingStoreReturnQueue_.size();
         if (queueSize > 0) {
-            outPair = backingStoreReturnQueue_.front();
+            index = backingStoreReturnQueue_.front();
             backingStoreReturnQueue_.pop();
         }
         if (queueSize > stats.maxOutputQueueSize)
             stats.maxOutputQueueSize = queueSize; 
-        return outPair;
+        return index;
     }
 
 
-    void appendToBackingStoreReturnQueue(uint64_t index, bool writeFlag) {
+    void appendToBackingStoreReturnQueue(uint64_t index) {
         const std::lock_guard<std::mutex> l(backingStoreReturnQueueMutex_);
-        backingStoreReturnQueue_.push(std::make_pair(index, writeFlag));
+        backingStoreReturnQueue_.push(index);
     }
 
 
-    uint64_t loadAsyncIORequest(uint64_t size, 
-            uint64_t backingStoreAlignment, 
-            uint64_t blockRequestIndex,
-            BlockReplayStats& stats) {
+    uint64_t loadAsyncIORequest(uint64_t offset, 
+                                    uint64_t size, 
+                                    bool writeFlag, 
+                                    uint64_t backingStoreAlignment, 
+                                    uint64_t blockRequestIndex,
+                                    BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(backingRequestMutex_);
         uint64_t loadIndex = maxConcurrentIO;
         for (uint64_t index=0; index<maxConcurrentIO; index++) {
             if (!backingRequestVec_.at(index).isDataLoaded()) {
                 loadIndex = index; 
-                backingRequestVec_.at(index).load(size, backingStoreAlignment, index, blockRequestIndex);
+                backingRequestVec_.at(index).load(offset, size, writeFlag, index, blockRequestIndex);
                 int ret = posix_memalign((void **)&bufferVec_.at(index), backingStoreAlignment, size);
                 if (ret != 0) {
                     throw std::runtime_error(
@@ -590,10 +631,10 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doRead(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+        uint64_t asyncIOIndex = loadAsyncIORequest(offset, size, false, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
-        submitAsyncRead(asyncIOIndex, offset, size);
+            asyncIOIndex = loadAsyncIORequest(offset, size, false, backingStoreAlignment, index, stats);
+        submitAsyncRead(asyncIOIndex);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
         stats.backingReadReqCount++;
         stats.backingReadIORequested += size; 
@@ -603,10 +644,10 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void doWrite(uint64_t index, uint64_t offset, uint64_t size, BlockReplayStats& stats) {
         const std::lock_guard<std::mutex> l(iocbToAsyncIndexMapMutex_);
-        uint64_t asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
+        uint64_t asyncIOIndex = loadAsyncIORequest(offset, size, true, backingStoreAlignment, index, stats);
         while (asyncIOIndex == maxConcurrentIO)
-            asyncIOIndex = loadAsyncIORequest(size, backingStoreAlignment, index, stats);
-        submitAsyncWrite(asyncIOIndex, offset, size);
+            asyncIOIndex = loadAsyncIORequest(offset, size, true, backingStoreAlignment, index, stats);
+        submitAsyncWrite(asyncIOIndex);
         iocbToAsyncIndexMap_.insert(std::pair<iocb*, uint64_t>(backingRequestVec_.at(asyncIOIndex).iocbPtr_, asyncIOIndex));
         stats.backingWriteReqCount++;
         stats.backingWriteIORequested += size; 
@@ -615,64 +656,131 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
 
     void processRead(BlockRequest& req, BlockReplayStats& stats) {
+        // load the cache misses 
+        std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getMissByteRange(req);
+
+        // then get the async IO caused due to misses 
+        auto asyncIOVec = req.getAsyncIO();
+
+
+
+
+
+
         uint64_t index = req.getKey();
         uint64_t offset = req.getOffset();
         uint64_t size = req.getSize();
-        std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getCacheMiss(req);
+
 
         uint64_t cacheMissBytes = 0;
+        uint64_t cacheMissCount = 0;
         for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
             cacheMissBytes += std::get<1>(miss);
+            cacheMissCount += 1;
         }
 
         uint64_t reqTotalIO = req.getTotalIO();
         assert(reqTotalIO>=cacheMissBytes);
+
         if (cacheMissBytes == 0) {   
             // no miss all done 
             readBlockCacheHit(index, reqTotalIO-cacheMissBytes, true, stats);
         } else {
             readBlockCacheHit(index, reqTotalIO-cacheMissBytes, false, stats);
-            for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
+            for (std::tuple<uint64_t, uint64_t, bool> asyncIO : asyncIOVec) {
                 doRead(index, 
-                        std::get<0>(miss), 
-                        std::get<1>(miss), 
+                        std::get<0>(asyncIO), 
+                        std::get<1>(asyncIO), 
                         stats);
             }
+            // for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
+            //     doRead(index, 
+            //             std::get<0>(miss), 
+            //             std::get<1>(miss), 
+            //             stats);
+            // }
+
+            // auto testMiss = req.getMissByteRangeVec();
+            // for (uint64_t curMissCount=0; curMissCount<cacheMissCount; curMissCount++) {
+
+            //     uint64_t missVecOffset = std::get<0>(cacheMissVec.at(curMissCount));
+            //     uint64_t missVecSize = std::get<1>(cacheMissVec.at(curMissCount));
+
+            //     uint64_t missTestOffset = std::get<0>(testMiss.at(curMissCount));
+            //     uint64_t missTestSize = std::get<1>(testMiss.at(curMissCount));
+
+            //     uint64_t asyncOffset = std::get<0>(asyncIOVec.at(curMissCount));
+            //     uint64_t asyncIOSize = std::get<1>(asyncIOVec.at(curMissCount));
+
+            //     std::cout << folly::sformat("{}/{}/{} and {}/{}/{}\n", 
+            //                                     missVecOffset, 
+            //                                     asyncOffset, 
+            //                                     missTestOffset,
+            //                                     missVecSize, 
+            //                                     asyncIOSize,
+            //                                     missTestSize);
+
+            // }
+
+
         }        
     }
 
 
+    bool isPageInCache(uint64_t pageIndex) {
+        bool pageInCache = false; 
+        const std::string key = std::to_string(pageIndex);
+        auto it = cache_->find(key, AccessMode::kRead);
+        if (it != nullptr) {    
+            pageInCache = true; 
+        }  
+        return pageInCache;
+    }
+
+
     void processWrite(BlockRequest& req, BlockReplayStats& stats) {
+        // check the alignment in the front and rear page to see if read is needed 
         uint64_t index = req.getKey();
-        uint64_t offset = req.getOffset();
-        uint64_t size = req.getSize();
         uint64_t frontMisalignment = req.getFrontAlignment();
         if (frontMisalignment > 0) {
+            // need to read the front page  
             uint64_t startPage = req.getStartPage();
-            uint64_t startPageOffset = config_.pageSizeBytes*startPage;
-            const std::string key = std::to_string(startPage);
-            auto it = cache_->find(key, AccessMode::kRead);
-            if (it == nullptr) {
-                doRead(index, startPageOffset, config_.pageSizeBytes, stats);
-            } else {
+            uint64_t startPageOffset = config_.pageSizeBytes * startPage;
+            if (isPageInCache(startPage)) {
                 readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
-            }  
-        } 
-            
+            } else {
+                req.addCacheMissByteRange(startPageOffset, config_.pageSizeBytes, false);
+            }
+        }
+
+        // if a single page is being written and the front misalignment is wrong
+        // then the page is already going to be read, no need to read again 
+        uint64_t pageCount = req.getPageCount();
         uint64_t rearMisalignment = req.getRearAlignment();
-        if (rearMisalignment > 0) {
+        if ((rearMisalignment > 0) && ((pageCount > 1) || (frontMisalignment == 0))) {
+            // need to read the rear page 
             uint64_t endPage = req.getEndPage();
             uint64_t endPageOffset = config_.pageSizeBytes*endPage;
-            const std::string key = std::to_string(endPage);
-            auto it = cache_->find(key, AccessMode::kRead);
-            if (it == nullptr) {
-                doRead(index, endPageOffset, config_.pageSizeBytes, stats);
-            } else {
+            if (isPageInCache(endPage)) {
                 readBlockCacheHit(index, config_.pageSizeBytes, false, stats);
+            } else {
+                req.addCacheMissByteRange(endPageOffset, config_.pageSizeBytes, false);
             }
-        } 
+        }
 
-        doWrite(index, offset, size, stats);
+        req.addCacheMissByteRange(req.getOffset(), req.getSize(), true);
+        auto asyncIOVec = req.getAsyncIO();
+        for (std::tuple<uint64_t, uint64_t, bool> asyncIO : asyncIOVec) {
+            uint64_t asyncIOStartOffset = std::get<0>(asyncIO);
+            uint64_t asyncIOSize = std::get<1>(asyncIO);
+            bool writeFlag = std::get<2>(asyncIO);
+            if (writeFlag) {
+                doWrite(index, asyncIOStartOffset, asyncIOSize, stats);
+            } else {
+                doRead(index, asyncIOStartOffset, asyncIOSize, stats);
+            }
+        }
+
     }
 
 
@@ -915,7 +1023,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     std::vector<char*> bufferVec_;
 
     mutable std::mutex backingStoreReturnQueueMutex_;
-    std::queue<std::pair<uint64_t, bool>> backingStoreReturnQueue_;
+    std::queue<uint64_t> backingStoreReturnQueue_;
 
     mutable std::mutex iocbToAsyncIndexMapMutex_;
     std::map<iocb*, uint64_t> iocbToAsyncIndexMap_;
