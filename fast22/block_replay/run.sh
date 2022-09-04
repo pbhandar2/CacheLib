@@ -1,1 +1,0 @@
-../../opt/cachelib/bin/cachebench --json_test_config $1 

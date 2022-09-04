@@ -1,1 +1,0 @@
-./run.sh ../../cachelib/cachebench/test_configs/block_replay/sample_config.json 
