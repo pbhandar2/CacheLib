@@ -6,3 +6,6 @@ The above code will generated a file out.csv in the same directory. Now run the 
 by passing it to the run script. 
 
 ```./run_experiment_list.sh out.csv```
+
+
+

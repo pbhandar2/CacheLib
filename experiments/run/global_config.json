@@ -7,6 +7,7 @@
     "max_t2_size_mb": 400000,
     "disk_file_path": "~/disk/disk.file",
     "nvm_file_path": "~/nvm/disk.file",
+    "experiment_list_dir": "~",
     "default": {
         "thread_count": 16,
         "iat_scale_factor": 100, 

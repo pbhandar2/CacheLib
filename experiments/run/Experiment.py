@@ -14,7 +14,7 @@ class Experiment:
                     aws_access_key,
                     aws_secret_key,
                     min_t1_size = 100, 
-                    size_multiplier = [0,2,4,8], 
+                    size_multiplier = 8, 
                     global_config_file = "global_config.json"):
         
         # load the global configuration 
@@ -62,17 +62,18 @@ class Experiment:
                                                             iteration)
 
 
-    def get_output(self, 
-                    experiment_id, 
-                    machine_id, 
-                    workload_id,
-                    queue_size, 
-                    thread_count, 
-                    iat_scale_factor,  
-                    tier1_size_mb, 
-                    tier2_size_mb,
-                    iteration,
-                    out_handle):
+    def write_experiment_to_file(self, 
+                                    experiment_id, 
+                                    machine_id, 
+                                    workload_id,
+                                    queue_size, 
+                                    thread_count, 
+                                    iat_scale_factor,  
+                                    tier1_size_mb, 
+                                    tier2_size_mb,
+                                    iteration,
+                                    out_handle):
+        # key of the experiment 
         key = self.get_s3_key(self.experiment_id,
                                 self.machine_id,
                                 workload_id,
@@ -91,7 +92,8 @@ class Experiment:
                                                                                                 self.global_config["max_t2_size_mb"],
                                                                                                 tier1_size_mb,                                                                              tier2_size_mb))
             return out_str
-
+        
+        # check if key exists in S3 bucket already 
         if (self.s3.check(key) == 0):
             out_str = "{},{},{},{},{},{},{},{},{},{}\n".format(experiment_id,
                                                                 machine_id,
@@ -111,97 +113,136 @@ class Experiment:
         return out_str 
 
 
-    def default_generator(self, workload_id, output_file_path):
-        experiment_config = self.global_config
-        
-        queue_size = experiment_config["default"]["queue_size"]
-        thread_count = experiment_config["default"]["thread_count"]
-        iat_scale_factor = experiment_config["default"]["iat_scale_factor"]
-        min_iteration = experiment_config["default"]["min_iteration"]
+    def basic(self, 
+                workload_id, 
+                queue_size,
+                thread_count,
+                iat_scale_factor,
+                min_iteration,
+                output_file_path):
 
         out_handle = open(output_file_path, "w+")
-
+        
         # Max tier-1 cache size ST case 
         for cur_iteration in range(min_iteration):
-            self.get_output(self.experiment_id,
-                                self.machine_id,
-                                workload_id,
-                                queue_size,
-                                thread_count,
-                                iat_scale_factor,
-                                self.max_tier1_size_mb,
-                                0,
-                                cur_iteration,
-                                out_handle)
+            self.write_experiment_to_file(self.experiment_id,
+                                            self.machine_id,
+                                            workload_id,
+                                            queue_size,
+                                            thread_count,
+                                            iat_scale_factor,
+                                            self.max_tier1_size_mb,
+                                            0,
+                                            cur_iteration,
+                                            out_handle)
 
         for tier1_size_mb in reversed(range(max(self.min_t1_size_mb, self.step_size_mb), 
                         self.max_tier1_size_mb, 
                         self.step_size_mb)):
-            for tier2_size_multiplier in self.size_multiplier:
+
+                # based on how much tier-1 is reduced from max tier-1 size 
+                # determine the tier-2 size based on the size multiplier 
                 t1_size_reduced_mb = self.max_tier1_size_mb - tier1_size_mb
-                tier2_size_mb = t1_size_reduced_mb * tier2_size_multiplier
+                tier2_size_mb = t1_size_reduced_mb * self.size_multiplier
 
                 for cur_iteration in range(min_iteration):
-                    self.get_output(self.experiment_id,
-                                        self.machine_id,
-                                        workload_id,
-                                        queue_size,
-                                        thread_count,
-                                        iat_scale_factor,
-                                        tier1_size_mb,
-                                        tier2_size_mb,
-                                        cur_iteration,
-                                        out_handle)
+                    self.write_experiment_to_file(self.experiment_id,
+                                                    self.machine_id,
+                                                    workload_id,
+                                                    queue_size,
+                                                    thread_count,
+                                                    iat_scale_factor,
+                                                    tier1_size_mb,
+                                                    tier2_size_mb,
+                                                    cur_iteration,
+                                                    out_handle)
         out_handle.close()
 
 
 def disk_and_nvm_file_check(disk_file_path, nvm_file_path):
     assert(disk_file_path.exists())
     assert(nvm_file_path.exists())
-    
 
 
 def main(args):
-    disk_and_nvm_file_check(args.d, args.n)
-    experiment = Experiment(args.experiment_id, 
-                                args.machine_id, 
-                                args.s, 
-                                args.m, 
-                                args.awskey, 
-                                args.awssecret)
-    experiment.default_generator(args.workload_id, args.o)
+    disk_and_nvm_file_check(args.diskFilePath, args.nvmFilePath)
+    print("Running experiment id: {}".format(args.experimentID))
+    experiment = Experiment(args.experimentID, 
+                                args.machineID, 
+                                args.stepSizeMB, 
+                                args.maxRAMCacheSize, 
+                                args.awsKey, 
+                                args.awsSecret)
+    
+    experiment.basic(args.workloadID, 
+                        args.queueSize,
+                        args.threadCount,
+                        args.iatScaleFactor,
+                        args.iterationCount,
+                        args.outputPath)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
-    parser.add_argument("experiment_id",
+
+    parser.add_argument("experimentID",
                             help="Experiment identification")
-    parser.add_argument("machine_id",
+
+    parser.add_argument("machineID",
                             help="Machine identification")
-    parser.add_argument("workload_id",
+
+    parser.add_argument("workloadID",
                             help="Workload identification")
-    parser.add_argument("--awskey",
+
+    parser.add_argument("--queueSize",
+                            type=int,
+                            default=128,
+                            help="Maximum outstanding requests queued in the system")
+
+    parser.add_argument("--threadCount",
+                            type=int,
+                            default=16,
+                            help="Number of threads used for each of block request and async IO processing")
+        
+    parser.add_argument("--iatScaleFactor",
+                            type=int,
+                            default=100,
+                            help="The value by which to divide IAT between block requests")
+
+    parser.add_argument("--iterationCount",
+                            type=int,
+                            default=3,
+                            help="Number of iterations to run per configuration")
+
+    parser.add_argument("--awsKey",
                             help="AWS access key")
-    parser.add_argument("--awssecret",
+    
+    parser.add_argument("--awsSecret",
                             help="AWS secret key")
-    parser.add_argument("--o",
-                            default=pathlib.Path("out.csv"),
+
+    parser.add_argument("--outputPath",
+                            default=pathlib.Path("~").expanduser().joinpath("out.csv"),
                             type=pathlib.Path,
                             help="Output path of the experiment list")
-    parser.add_argument("--d",
+    
+    parser.add_argument("--diskFilePath",
                             default=pathlib.Path.home().joinpath("disk", "disk.file"),
                             type=pathlib.Path,
                             help="Path to file on disk")
-    parser.add_argument("--n",
+    
+    parser.add_argument("--nvmFilePath",
                             default=pathlib.Path.home().joinpath("nvm", "disk.file"),
                             type=pathlib.Path,
                             help="Path to file on NVM")
-    parser.add_argument("--s",
-                            default=200,
-                            type=int,
-                            help="Step size in MB")
-    parser.add_argument("--m",
+    
+    parser.add_argument("--maxRAMCacheSize",
                             default=1000,
                             type=int,
                             help="Max tier-1 cache size")
+
+    parser.add_argument("--stepSizeMB",
+                            type=int,
+                            default=200,
+                            help="Step size in MB")
+    
     main(parser.parse_args())
