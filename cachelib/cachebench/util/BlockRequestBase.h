@@ -105,7 +105,15 @@ struct AsyncIORequest {
 
 class BlockRequest {
     public:
-        BlockRequest() {}
+        BlockRequest(){}
+
+        BlockRequest(uint64_t pageSize, 
+                        uint64_t lbaSize,
+                        uint64_t maxDiskFileOffset) {
+            pageSize_ = pageSize; 
+            lbaSize_ = lbaSize;
+            maxDiskFileOffset_ = maxDiskFileOffset;
+        }
 
 
         ~BlockRequest(){
@@ -121,11 +129,18 @@ class BlockRequest {
         }
 
 
+        void setDefault(uint64_t pageSize, 
+                        uint64_t lbaSize,
+                        uint64_t maxDiskFileOffset) {
+            pageSize_ = pageSize; 
+            lbaSize_ = lbaSize;
+            maxDiskFileOffset_ = maxDiskFileOffset;
+        }
+
+
         void load(uint64_t lba, 
                     uint64_t size, 
                     OpType op, 
-                    uint64_t pageSize, 
-                    uint64_t lbaSize,
                     uint64_t key,
                     facebook::cachelib::util::PercentileStats& stats) {
             // when the load is called it should always be when size = 0 (no data is set)
@@ -136,8 +151,6 @@ class BlockRequest {
             lba_ = lba;
             size_ = size; 
             op_ = op;
-            pageSize_ = pageSize; 
-            lbaSize_ = lbaSize;
             key_ = key; 
 
             offset_ = lba_*lbaSize_;
@@ -203,7 +216,13 @@ class BlockRequest {
             out.append(folly::sformat("Read async count: {},", readAsyncCount_));
             out.append(folly::sformat("Write async count: {},", writeAsyncCount_));
             out.append(folly::sformat("Hit: {},", hitBytes_));   
-            out.append(folly::sformat("Miss count: {}", missCount_));       
+            out.append(folly::sformat("Miss count: {}", missCount_)); 
+
+            uint64_t missIndex = 0;
+            for (auto missByteRange : missByteRangeVec_) {
+                out.append(folly::sformat("Miss index: {} offset: {}",missIndex, std::get<0>(missByteRange)));
+                missIndex++;
+            }      
             return out; 
         }
 
@@ -338,6 +357,17 @@ class BlockRequest {
                 uint64_t missByteRangeStartOffset = std::get<0>(curMissByteRange);
                 uint64_t missByteRangeSize = std::get<1>(curMissByteRange);
                 uint64_t missByteRangeWriteFlag = std::get<2>(curMissByteRange);
+                
+                // handle the case where it might overflow 
+                if (missByteRangeStartOffset + missByteRangeSize >= maxDiskFileOffset_) {
+                    if (missByteRangeStartOffset >= maxDiskFileOffset_) {
+                        missByteRangeStartOffset = missByteRangeStartOffset % maxDiskFileOffset_;
+                    }
+                    if (missByteRangeStartOffset+missByteRangeSize > maxDiskFileOffset_) {
+                        missByteRangeStartOffset = 0;
+                    }
+                }
+
                 uint64_t missByteRangeEndOffset = missByteRangeStartOffset + missByteRangeSize;
                  
                 // an async IO can larger than the miss byte range dur to alignment issues 
@@ -353,11 +383,11 @@ class BlockRequest {
                     }
                     std::get<3>(missByteRangeVec_.at(missIndex)) = true; 
                     break;
-                }
+                } 
             }
 
             if (!found)
-                throw std::runtime_error(folly::sformat("Could not find miss byte range corresponding to this asycn IO! \n {} \n", printStatus()));
+                throw std::runtime_error(folly::sformat("Could not find miss byte range corresponding to this asycn IO: {}, {}! \n {} \n", asyncOffset, asyncSize, printStatus()));
 
             if (writeFlag) {
                 writeAsyncBytes_ += asyncSize;
@@ -382,7 +412,7 @@ class BlockRequest {
         }
 
 
-        std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO(uint64_t maxDiskOffset) {
+        std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO() {
             std::lock_guard<std::mutex> l(updateMutex_);
             std::vector<std::tuple<uint64_t, uint64_t, bool>> asyncIOVec;
             // get all async IO request to be submitted for each cache miss / write request 
@@ -412,16 +442,16 @@ class BlockRequest {
 
                 bool writeFlag = std::get<2>(missByteRangeEntry);
 
-                if (alignedSize > maxDiskOffset) {
+                if (alignedSize > maxDiskFileOffset_) {
                     throw std::runtime_error(folly::sformat("Size too large for the size of disk file"));
                 }
 
-                if (alignedOffset + alignedSize >= maxDiskOffset) {
-                    if (alignedOffset > maxDiskOffset) {
-                        alignedOffset = alignedOffset % maxDiskOffset;
+                if (alignedOffset + alignedSize >= maxDiskFileOffset_) {
+                    if (alignedOffset >= maxDiskFileOffset_) {
+                        alignedOffset = alignedOffset % maxDiskFileOffset_;
                     }
-
-                    if (alignedOffset + alignedSize > maxDiskOffset) {
+                    
+                    if (alignedOffset + alignedSize > maxDiskFileOffset_) {
                         alignedOffset = 0;
                     }
                 }
@@ -442,6 +472,7 @@ class BlockRequest {
     uint64_t writeAsyncCount_=0;
     uint64_t readAsyncBytes_=0;
     uint64_t writeAsyncBytes_=0;
+    uint64_t maxDiskFileOffset_;
 
     OpType op_;
 

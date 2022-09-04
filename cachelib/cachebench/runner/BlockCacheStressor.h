@@ -77,6 +77,13 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             throw std::runtime_error(
                 folly::sformat("Error in io_setup, return: {}\n", ret));
         }
+
+        // set default valeus for all block requests
+        uint64_t alignedDiskFileOffset = config_.maxDiskFileOffset - (config_.maxDiskFileOffset % backingStoreAlignment);
+        for (uint64_t i=0; i<config_.inputQueueSize; i++) {
+            blockRequestVec_.at(i).setDefault(config_.pageSizeBytes, config_.traceBlockSizeBytes, alignedDiskFileOffset);
+        }
+
     }
 
 
@@ -655,7 +662,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getMissByteRange(req);
 
         // then get the async IO caused due to misses 
-        auto asyncIOVec = req.getAsyncIO(config_.maxDiskFileOffset);
+        auto asyncIOVec = req.getAsyncIO();
 
 
         uint64_t index = req.getKey();
@@ -766,7 +773,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         }
 
         req.addCacheMissByteRange(req.getOffset(), req.getSize(), true);
-        auto asyncIOVec = req.getAsyncIO(config_.maxDiskFileOffset);
+        auto asyncIOVec = req.getAsyncIO();
         for (std::tuple<uint64_t, uint64_t, bool> asyncIO : asyncIOVec) {
             uint64_t asyncIOStartOffset = std::get<0>(asyncIO);
             uint64_t asyncIOSize = std::get<1>(asyncIO);
@@ -813,8 +820,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                         blockRequestVec_.at(reqIndex).load(lba, 
                                                             size, 
                                                             op,
-                                                            config_.pageSizeBytes, 
-                                                            config_.traceBlockSizeBytes,
                                                             reqIndex,
                                                             *sLatBlockReadPercentile_);
                         break;
@@ -825,8 +830,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                         blockRequestVec_.at(reqIndex).load(lba, 
                                                             size, 
                                                             op,
-                                                            config_.pageSizeBytes, 
-                                                            config_.traceBlockSizeBytes,
                                                             reqIndex,
                                                             *sLatBlockWritePercentile_);
                         break;
