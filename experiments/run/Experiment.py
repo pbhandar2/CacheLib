@@ -13,8 +13,8 @@ class Experiment:
                     max_tier1_size_mb, 
                     aws_access_key,
                     aws_secret_key,
+                    size_multiplier, 
                     min_t1_size = 100, 
-                    size_multiplier = 8, 
                     global_config_file = "global_config.json"):
         
         # load the global configuration 
@@ -172,7 +172,8 @@ def main(args):
                                 args.stepSizeMB, 
                                 args.maxRAMCacheSize, 
                                 args.awsKey, 
-                                args.awsSecret)
+                                args.awsSecret,
+                                args.sizeMultiplier)
     
     experiment.basic(args.workloadID, 
                         args.queueSize,
@@ -244,5 +245,10 @@ if __name__ == "__main__":
                             type=int,
                             default=200,
                             help="Step size in MB")
+
+    parser.add_argument("--sizeMultiplier",
+                            type=int,
+                            default=8,
+                            help="Size multiplier used to determine the size of tier-2 cache")
     
     main(parser.parse_args())
