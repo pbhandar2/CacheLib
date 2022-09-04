@@ -24,9 +24,8 @@ class Experiment:
         # s3 client 
         self.s3 = S3Client()
         
-        # options arguments 
+        # options 
         self.min_t1_size_mb = min_t1_size
-        self.size_multiplier = size_multiplier
 
         # arguments 
         self.experiment_id = experiment_id
@@ -35,6 +34,7 @@ class Experiment:
         self.max_tier1_size_mb = max_tier1_size_mb
         self.aws_access_key = aws_access_key 
         self.aws_secret_key = aws_secret_key
+        self.size_multiplier = size_multiplier
         
 
     def check_if_output_key_exists(self, key):
