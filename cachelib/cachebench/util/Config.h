@@ -266,6 +266,7 @@ struct StressorConfig : public JSONConfig {
   std::string diskFilePath{};
   bool relativeTiming{true};
   double scaleIAT{1.0};
+  uint64_t maxDiskFileOffset;
 
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);

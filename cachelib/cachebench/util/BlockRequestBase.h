@@ -382,7 +382,7 @@ class BlockRequest {
         }
 
 
-        std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO() {
+        std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO(uint64_t maxDiskOffset) {
             std::lock_guard<std::mutex> l(updateMutex_);
             std::vector<std::tuple<uint64_t, uint64_t, bool>> asyncIOVec;
             // get all async IO request to be submitted for each cache miss / write request 
@@ -411,6 +411,22 @@ class BlockRequest {
                 }
 
                 bool writeFlag = std::get<2>(missByteRangeEntry);
+
+                if (alignedSize > maxDiskOffset) {
+                    throw std::runtime_error(folly::sformat("Size too large for the size of disk file"));
+                }
+
+                if (alignedOffset + alignedSize >= maxDiskOffset) {
+                    if (alignedOffset > maxDiskOffset) {
+                        alignedOffset = alignedOffset % maxDiskOffset;
+                    }
+
+                    if (alignedOffset + alignedSize > maxDiskOffset) {
+                        alignedOffset = 0;
+                    }
+                }
+
+
                 auto asyncIOEntry = std::make_tuple(alignedOffset, alignedSize, writeFlag);
                 asyncIOVec.push_back(asyncIOEntry);
             }

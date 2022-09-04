@@ -655,11 +655,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         std::vector<std::tuple<uint64_t, uint64_t>> cacheMissVec = getMissByteRange(req);
 
         // then get the async IO caused due to misses 
-        auto asyncIOVec = req.getAsyncIO();
-
-
-
-
+        auto asyncIOVec = req.getAsyncIO(config_.maxDiskFileOffset);
 
 
         uint64_t index = req.getKey();
@@ -770,7 +766,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         }
 
         req.addCacheMissByteRange(req.getOffset(), req.getSize(), true);
-        auto asyncIOVec = req.getAsyncIO();
+        auto asyncIOVec = req.getAsyncIO(config_.maxDiskFileOffset);
         for (std::tuple<uint64_t, uint64_t, bool> asyncIO : asyncIOVec) {
             uint64_t asyncIOStartOffset = std::get<0>(asyncIO);
             uint64_t asyncIOSize = std::get<1>(asyncIO);
