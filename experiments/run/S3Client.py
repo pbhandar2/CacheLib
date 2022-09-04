@@ -12,7 +12,7 @@ class S3Client:
     
     def download(self, key, file_path):
         try:
-            self.s3.download_file(bucket, key, file_path)
+            self.s3.download_file(self.bucket, key, file_path)
         except ClientError as e:
             logging.error("Error: {} in download".format(e))
 
