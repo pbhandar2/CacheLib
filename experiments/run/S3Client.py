@@ -10,7 +10,7 @@ class S3Client:
         self.keys = self.s3.list_objects_v2(Bucket=self.bucket)
 
     
-    def download(self, bucket, key, file_path):
+    def download(self, key, file_path):
         try:
             self.s3.download_file(bucket, key, file_path)
         except ClientError as e:
