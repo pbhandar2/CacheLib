@@ -8,5 +8,9 @@ The above code will generated a file out.csv in the home directory which is not 
 
 For details in how to run specific experiments refer to the experiment sheet, 
 
-https://docs.google.com/spreadsheets/d/1nuOhB131oT6aGcEzyawZ3A-ReagqyzdI0JizrLhV4KQ/edit#gid=0
+https://docs.google.com/spreadsheets/d/1nuOhB131oT6aGcEzyawZ3A-ReagqyzdI0JizrLhV4KQ/edit?usp=sharing
+
+Example command to run an experiment
+
+```sudo python3 Experiment.py basic $MACHINE$ $WORKLOAD$; sudo ./run_experiment_list.sh ~/out.csv ```
 
