@@ -14,8 +14,6 @@ set -o pipefail
 
 BACKING_DIR="${HOME}/disk"
 NVM_DIR="${HOME}/nvm"
-BACKING_FILE_SIZE_MB=900000 # 900 GB
-NVM_CACHE_SIZE_MB=410000 # 
 
 if [[ ! -d ${BACKING_DIR} ]]; then 
     mkdir ${BACKING_DIR}
@@ -30,6 +28,8 @@ fi
 
 backing_dev_path=${1}
 nvm_dev_path=${2}
+BACKING_FILE_SIZE_MB=${3}
+NVM_CACHE_SIZE_MB=${4} 
 
 if mountpoint -q ${BACKING_DIR}; then
     echo "${BACKING_DIR} already mounted"

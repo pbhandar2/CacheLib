@@ -11,7 +11,10 @@ set -o pipefail
 
 backing_dev_path=${1}
 nvm_dev_path=${2}
-./setup-mount.sh ${backing_dev_path} ${nvm_dev_path}
+backing_file_size_mb=${3}
+nvm_file_size_mb=${4}
+
+./setup-mount.sh ${backing_dev_path} ${nvm_dev_path} ${backing_file_size_mb} ${nvm_file_size_mb}
 
 aws_access_key=${3}
 aws_secret=${4}
