@@ -64,6 +64,14 @@ main() {
             echo "Block trace exists at ${block_trace_path}"
         fi 
 
+        # TODO: cleanup if block script still doesn't exist due to some reason 
+        if [ ! -f "${block_trace_path}" ]; then
+            echo "Block trace could not be downloaded"
+            exit
+        fi
+
+        
+
         ## create a config 
         python3 make_config.py ${queue_size} \
                                 ${thread_count} \
