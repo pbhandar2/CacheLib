@@ -30,8 +30,8 @@ backing_dev_path=${1}
 nvm_dev_path=${2}
 backing_file_size_gb=${3}
 nvm_file_size_gb=${4} 
-backing_file_size_byte=$((${backing_file_size_gb} * 1024 * 1024 * 1024))
-nvm_file_size_byte=$((${nvm_file_size_gb} * 1024 * 1024 * 1024))
+backing_file_size_byte=$(( backing_file_size_gb * 1024 * 1024 * 1024))
+nvm_file_size_byte=$(( nvm_file_size_gb * 1024 * 1024 * 1024))
 
 backing_file_path="${BACKING_DIR}/disk.file"
 if mountpoint -q ${BACKING_DIR}; then
