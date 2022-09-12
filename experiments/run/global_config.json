@@ -8,6 +8,7 @@
     "disk_file_path": "~/disk/disk.file",
     "nvm_file_path": "~/nvm/disk.file",
     "experiment_list_dir": "~",
+    "cachebench_cmd": "../../opt/cachelib/bin/cachebench",
     "default": {
         "thread_count": 16,
         "iat_scale_factor": 100, 

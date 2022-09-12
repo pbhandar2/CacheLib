@@ -3,7 +3,10 @@ import pathlib
 import argparse 
 from S3Client import S3Client
 
-SCRIPT_DESCRIPTION = """ Generate experiments to be run based on user input. """
+
+SCRIPT_DESCRIPTION = """ Run a set of experiments. """
+MIN_T1_SIZE_MB = 100 
+
 
 class Experiment:
     def __init__(self, 
@@ -14,7 +17,7 @@ class Experiment:
                     aws_access_key,
                     aws_secret_key,
                     size_multiplier, 
-                    min_t1_size = 100, 
+                    min_t1_size = MIN_T1_SIZE_MB, 
                     global_config_file = "global_config.json"):
         
         # load the global configuration 
@@ -26,11 +29,14 @@ class Experiment:
         
         # options 
         self.min_t1_size_mb = min_t1_size
+        assert self.min_t1_size_mb >= MIN_T1_SIZE_MB
 
         # arguments 
         self.experiment_id = experiment_id
         self.machine_id = machine_id
         self.step_size_mb = step_size_mb
+        assert self.step_size_mb >= MIN_T1_SIZE_MB
+
         self.max_tier1_size_mb = max_tier1_size_mb
         self.aws_access_key = aws_access_key 
         self.aws_secret_key = aws_secret_key
@@ -88,9 +94,11 @@ class Experiment:
         # check if cache size requirements are satisfied 
         if (tier1_size_mb > self.global_config["max_t1_size_mb"] or \
                 tier2_size_mb > self.global_config["max_t2_size_mb"]):
-            print("Cache size limit crossed. Limit-> T1:{},T2:{}, Size-> T1:{},T2:{}".format(self.global_config["max_t1_size_mb"],
-                                                                                                self.global_config["max_t2_size_mb"],
-                                                                                                tier1_size_mb,                                                                              tier2_size_mb))
+            print("Cache size limit crossed. Limit-> T1:{},T2:{}, \
+                    Size-> T1:{},T2:{}".format(self.global_config["max_t1_size_mb"],
+                                                self.global_config["max_t2_size_mb"],
+                                                tier1_size_mb,
+                                                tier2_size_mb))
             return out_str
         
         # check if key exists in S3 bucket already 
@@ -120,7 +128,7 @@ class Experiment:
                 iat_scale_factor,
                 min_iteration,
                 output_file_path):
-
+        
         out_handle = open(output_file_path, "w+")
         
         # Max tier-1 cache size ST case 
@@ -159,13 +167,15 @@ class Experiment:
         out_handle.close()
 
 
-def disk_and_nvm_file_check(disk_file_path, nvm_file_path):
+def disk_and_nvm_file_check(disk_file_path, nvm_file_path, size_multiplier):
     assert(disk_file_path.exists())
-    assert(nvm_file_path.exists())
+    # if running MT experiments, check if the file on NVM exists 
+    if size_multiplier > 0:
+        assert(nvm_file_path.exists())
 
 
 def main(args):
-    disk_and_nvm_file_check(args.diskFilePath, args.nvmFilePath)
+    disk_and_nvm_file_check(args.diskFilePath, args.nvmFilePath, args.sizeMultiplier)
     print("Running experiment id: {}".format(args.experimentID))
     experiment = Experiment(args.experimentID, 
                                 args.machineID, 
@@ -198,21 +208,25 @@ if __name__ == "__main__":
     parser.add_argument("--queueSize",
                             type=int,
                             default=128,
+                            choices=[32, 64, 128, 256],
                             help="Maximum outstanding requests queued in the system")
 
     parser.add_argument("--threadCount",
                             type=int,
                             default=16,
+                            choices=[8, 16, 32],
                             help="Number of threads used for each of block request and async IO processing")
         
     parser.add_argument("--iatScaleFactor",
                             type=int,
                             default=100,
+                            choices=[1, 10, 100, 1000],
                             help="The value by which to divide IAT between block requests")
 
     parser.add_argument("--iterationCount",
                             type=int,
                             default=3,
+                            choices=[3, 5, 10],
                             help="Number of iterations to run per configuration")
 
     parser.add_argument("--awsKey",
@@ -249,6 +263,7 @@ if __name__ == "__main__":
     parser.add_argument("--sizeMultiplier",
                             type=int,
                             default=8,
+                            choices=[2, 4, 8, 16],
                             help="Size multiplier used to determine the size of tier-2 cache")
     
     main(parser.parse_args())

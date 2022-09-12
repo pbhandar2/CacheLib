@@ -2,18 +2,19 @@ import argparse
 import pathlib 
 import math 
 import json 
+import os
 import pandas as pd 
 import numpy as np 
 
 
-def generate_config(
-        queue_size, 
-        thread_count, 
-        iat_scale_factor, 
-        block_trace_path,
-        t1_size,
-        t2_size,
-        output_path):
+def generate_config(queue_size, 
+                        thread_count, 
+                        iat_scale_factor, 
+                        block_trace_path,
+                        t1_size,
+                        t2_size,
+                        output_path,
+                        tag):
 
     with open("global_config.json") as f:
         global_config = json.load(f)
@@ -36,6 +37,8 @@ def generate_config(
     config["test_config"]["processorThreadCount"] = thread_count
     config["test_config"]["asyncIOTrackerThreadCount"] = thread_count
     config["test_config"]["scaleIAT"] = iat_scale_factor
+    config["test_config"]["hostName"] = os.uname()[1]
+    config["test_config"]["tag"] = tag
     config["test_config"]["replayGeneratorConfig"]["traceList"] = [str(block_trace_path.absolute())]
 
     with open(output_path, "w+") as out_handle:
@@ -43,7 +46,7 @@ def generate_config(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate config file")
+    parser = argparse.ArgumentParser(description="Generate configuration file for an experiment.")
 
     parser.add_argument("queue_size",
                             type=int,
@@ -73,6 +76,10 @@ if __name__ == "__main__":
                             type=pathlib.Path,
                             help="Output path of config")
 
+    parser.add_argument("tag",
+                            default="na",
+                            help="Unique tag to identify experiment")
+
     args = parser.parse_args()
 
     generate_config(
@@ -82,4 +89,5 @@ if __name__ == "__main__":
         args.block_trace_path,
         args.t1_size, 
         args.t2_size,
-        args.output_path)
+        args.output_path,
+        args.tag)
