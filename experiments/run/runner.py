@@ -135,11 +135,11 @@ class Runner:
             for tier2_size_mb in tier2_size_mb_list:
                 # check if the needed T1 and T2 is possible 
                 if tier1_size_mb > self.args.ramSizeMB:
-                    print("Tier 1 size needed is too large!")
+                    print("Tier 1 size needed is too large! Need: {} Max: {}".format(tier1_size_mb, self.args.ramSizeMB))
                     continue 
 
                 if tier2_size_mb > self.args.nvmSizeMB:
-                    print("Tier 2 size needed is too large!")
+                    print("Tier 2 size needed is too large! Need: {} Max: {}".format(tier2_size_mb, self.args.nvmSizeMB))
                     continue 
 
                 self.generate_config_file(tier1_size_mb, tier2_size_mb)
@@ -148,11 +148,11 @@ class Runner:
 
                     # check if key already exists 
                     if (self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=upload_key)['KeyCount'] == 0):
-                        print("Key does not exist {}".format(upload_key))
+                        print("Key does not exist -> {}".format(upload_key))
 
                         # upload config to key 
                         try:
-                            self.s3.upload_file(self.config_file_path, self.bucket_name, upload_key)
+                            self.s3.upload_file(str(self.config_file_path), self.bucket_name, upload_key)
                         except ClientError as e:
                             logging.error("Error: {} in upload".format(e))
 
@@ -166,12 +166,12 @@ class Runner:
 
                         # upload output to dump 
                         try:
-                            self.s3.upload_file(self.output_dump_path, self.bucket_name, upload_key)
+                            self.s3.upload_file(str(self.output_dump_path), self.bucket_name, upload_key)
                         except ClientError as e:
                             logging.error("Error: {} in upload".format(e))
 
                     else:
-                        print("Key exists {}".format(upload_key))
+                        print("Key exists -> {}".format(upload_key))
 
 
 if __name__ == "__main__":
