@@ -105,7 +105,6 @@ class Runner:
         config["test_config"]["processorThreadCount"] = self.thread_count
         config["test_config"]["asyncIOTrackerThreadCount"] = self.thread_count
         config["test_config"]["scaleIAT"] = self.iat_scale_factor
-        config["test_config"]["instance_type"] = self.machine_id
         config["test_config"]["tag"] = self.tag 
         config["test_config"]["replayGeneratorConfig"]["traceList"] = [str(self.block_trace_path.absolute())]
 
