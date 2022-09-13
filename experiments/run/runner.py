@@ -2,9 +2,11 @@ import argparse
 import pathlib 
 import os
 import math 
+import json 
 import pandas as pd 
 import boto3 
 import logging 
+import subprocess
 from botocore.exceptions import ClientError
 
 
@@ -36,6 +38,7 @@ DEFAULT_BUCKET = "mtcachedata"
 DEFAULT_DISK_FILE_PATH = pathlib.Path.home().joinpath("disk", "disk.file")
 DEFAULT_NVM_FILE_PATH = pathlib.Path.home().joinpath("nvm", "disk.file")
 DEFAULT_CONFIG_FILE_PATH = pathlib.Path.home().joinpath("temp_config.json")
+DEFAULT_OUTPUT_DUMP_PATH = pathlib.Path.home().joinpath("temp_out.dump")
 
 DEFAULT_EXTERNAL_DATA = pathlib.Path("../data/cp_block.csv")
 
@@ -54,6 +57,9 @@ class Runner:
         self.iat_scale_factor = args.iatScaleFactor
         self.tag = args.tag
         self.block_trace_path = pathlib.Path.home().joinpath("{}.csv".format(self.workload_id))
+        self.config_file_path = args.configFilePath
+        self.output_dump_path = args.outputDumpPath
+        self.run_cmd = args.runCMD
 
         self.s3 = boto3.client('s3')
         self.bucket_name = args.bucketName
@@ -98,7 +104,10 @@ class Runner:
         config["test_config"]["scaleIAT"] = self.iat_scale_factor
         config["test_config"]["hostName"] = os.uname()[1]
         config["test_config"]["tag"] = self.tag 
-        config["test_config"]["replayGeneratorConfig"]["traceList"] = [str(block_trace_path.absolute())]
+        config["test_config"]["replayGeneratorConfig"]["traceList"] = [str(self.block_trace_path.absolute())]
+
+        with self.config_file_path.open("w+") as f:
+            json.dump(config, f, indent=4)
 
 
     def get_upload_key(self, t1_size, t2_size, cur_iteration):
@@ -114,14 +123,16 @@ class Runner:
     
     def fixed_step(self):
         # start iteration from larger size caches that finishes faster 
-        for tier1_size_mb in reversed(range(self.step_size_mb, self.max_t1_size_gb*1000, self.step_size_mb)):
+        for tier1_size_mb in reversed(range(self.step_size_mb, self.max_t1_size_gb*1000+1, self.step_size_mb)):
             # generate all possible T2 sizes based on current T1 size and max T1 size 
             diff_from_max_tier1_size_mb = self.max_t1_size_gb*1000 - tier1_size_mb
 
             tier2_step_size = self.step_size_mb * self.size_multiplier
             max_tier2_size = diff_from_max_tier1_size_mb * self.size_multiplier
+            tier2_size_mb_list = list(reversed(range(tier2_step_size, max_tier2_size, tier2_step_size)))
+            tier2_size_mb_list.append(0)
 
-            for tier2_size_mb in reversed(range(tier2_step_size, max_tier2_size, tier2_step_size)):
+            for tier2_size_mb in tier2_size_mb_list:
                 # check if the needed T1 and T2 is possible 
                 if tier1_size_mb > self.args.ramSizeMB:
                     print("Tier 1 size needed is too large!")
@@ -131,24 +142,36 @@ class Runner:
                     print("Tier 2 size needed is too large!")
                     continue 
 
-                print(tier1_size_mb, tier2_size_mb)
-                # create a config file 
-                pass 
-
+                self.generate_config_file(tier1_size_mb, tier2_size_mb)
                 for current_iteration in range(self.iteration_count):
                     upload_key = self.get_upload_key(tier1_size_mb, tier2_size_mb, current_iteration)
 
                     # check if key already exists 
                     if (self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=upload_key)['KeyCount'] == 0):
                         print("Key does not exist {}".format(upload_key))
+
+                        # upload config to key 
+                        try:
+                            self.s3.upload_file(self.config_file_path, self.bucket_name, upload_key)
+                        except ClientError as e:
+                            logging.error("Error: {} in upload".format(e))
+
+                        f = self.output_dump_path.open("w+")
+
+                        # run the experiment 
+                        p1 = subprocess.run([self.run_cmd, "--json_test_config", str(self.config_file_path)],
+                                            stdout=f)
+
+                        f.close()
+
+                        # upload output to dump 
+                        try:
+                            self.s3.upload_file(self.output_dump_path, self.bucket_name, upload_key)
+                        except ClientError as e:
+                            logging.error("Error: {} in upload".format(e))
+
                     else:
                         print("Key exists {}".format(upload_key))
-
-                    # if it does no need for more work, if it doesn't then upload 
-                    pass
-
-                pass 
-
 
 
 if __name__ == "__main__":
@@ -239,6 +262,10 @@ if __name__ == "__main__":
     parser.add_argument("--configFilePath",
                             default=DEFAULT_CONFIG_FILE_PATH,
                             help="Path where configuration files are generated and read from")
+
+    parser.add_argument("--outputDumpPath",
+                            default=DEFAULT_OUTPUT_DUMP_PATH,
+                            help="Path where the dump from experiment is stored")
 
     parser.add_argument("--tag",
                             default=DEFAULT_TAG,
