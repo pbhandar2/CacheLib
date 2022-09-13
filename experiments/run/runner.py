@@ -3,6 +3,9 @@ import pathlib
 import os
 import math 
 import pandas as pd 
+import boto3 
+import logging 
+from botocore.exceptions import ClientError
 
 
 # user defined variables 
@@ -16,17 +19,24 @@ DEFAULT_QUEUE_SIZE = 128
 DEFAULT_THREAD_COUNT = 16
 DEFAULT_IAT_SCALE_FACTOR = 100 
 DEFAULT_ITERATION_COUNT = 3
-DEFAULT_MAX_T1_SIZE_MB = 2000 
-DEFAULT_MIN_T1_SIZE_MB = 100 
-DEFAULT_MEMORY_LIMIT = 40000
-DEFAULT_NVM_LIMIT = 400000
-DEFAULT_STEP_SIZE_MB = 1000
+DEFAULT_MAX_T1_SIZE_MB = 2000 # 2 GB
+DEFAULT_MIN_T1_SIZE_MB = 100 # 100 MB
+DEFAULT_MEMORY_LIMIT = 40000 # 40 GB
+DEFAULT_NVM_LIMIT = 400000 # 400 GB
+DEFAULT_STEP_SIZE_MB = 1000 # 1 GB
 DEFAULT_SIZE_MULTIPLIER = 16
-DEFAULT_DISK_FILE_PATH = pathlib.Path.home().joinpath("disk", "disk.file")
-DEFAULT_NVM_FILE_PATH = pathlib.Path.home().joinpath("nvm", "disk.file")
+
 DEFAULT_AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')
 DEFAULT_AWS_SECRET_KEY = os.getenv('AWS_SECRET_KEY')
+
 DEFAULT_RUN_COMMAND = "../../opt/cachelib/bin/cachebench"
+DEFAULT_TAG = "unknown"
+DEFAULT_BUCKET = "mtcachedata"
+
+DEFAULT_DISK_FILE_PATH = pathlib.Path.home().joinpath("disk", "disk.file")
+DEFAULT_NVM_FILE_PATH = pathlib.Path.home().joinpath("nvm", "disk.file")
+DEFAULT_CONFIG_FILE_PATH = pathlib.Path.home().joinpath("temp_config.json")
+
 DEFAULT_EXTERNAL_DATA = pathlib.Path("../data/cp_block.csv")
 
 
@@ -36,14 +46,70 @@ class Runner:
         self.workload_id = args.workloadID
         self.step_size_mb = args.stepSizeMB
         self.size_multiplier = args.sizeMultiplier
-        self.args = args 
+        self.iteration_count = args.iterationCount
+        self.nvm_file_path = args.nvmFilePath
+        self.disk_file_path = args.diskFilePath
+        self.queue_size = args.queueSize
+        self.thread_count = args.threadCount
+        self.iat_scale_factor = args.iatScaleFactor
+        self.tag = args.tag
+        self.block_trace_path = pathlib.Path.home().joinpath("{}.csv".format(self.workload_id))
 
+        self.s3 = boto3.client('s3')
+        self.bucket_name = args.bucketName
+
+        # if block trace file does not exist, download from S3 
+        if not self.block_trace_path.is_file():
+            print("Block trace path does not exist {}".format(self.block_trace_path))
+            try:
+                self.s3.download_file(self.bucket_name, 
+                                        "block_trace/{}.csv".format(self.workload_id), 
+                                        str(self.block_trace_path))
+            except ClientError as e:
+                logging.error("Error: {} in download".format(e))
+
+        self.args = args 
         self.external_df = None
         if args.externalData.is_file():
             self.external_df = pd.read_csv(args.externalData)
             assert self.workload_id in self.external_df["workload"].to_list()
             self.row = self.external_df[self.external_df["workload"]==self.workload_id]
             self.max_t1_size_gb = int(math.ceil(self.row["page_working_set_size"].item()/1e9))
+
+
+    def generate_config_file(self, t1_size, t2_size):
+        config = {}
+        if t2_size == 0:
+            with open("./config_templates/st_config_template.json") as f:
+                config = json.load(f)
+            config["cache_config"]["cacheSizeMB"] = t1_size 
+        else:
+            with open("./config_templates/mt_config_template.json") as f:
+                config = json.load(f)
+            config["cache_config"]["cacheSizeMB"] = t1_size 
+            config["cache_config"]["nvmCacheSizeMB"] = t2_size
+            config["cache_config"]["nvmCachePaths"] = str(self.nvm_file_path)
+        
+        config["test_config"]["diskFilePath"] = str(self.disk_file_path)
+        config["test_config"]["maxDiskFileOffset"] = self.disk_file_path.expanduser().stat().st_size
+        config["test_config"]["inputQueueSize"] = self.queue_size
+        config["test_config"]["processorThreadCount"] = self.thread_count
+        config["test_config"]["asyncIOTrackerThreadCount"] = self.thread_count
+        config["test_config"]["scaleIAT"] = self.iat_scale_factor
+        config["test_config"]["hostName"] = os.uname()[1]
+        config["test_config"]["tag"] = self.tag 
+        config["test_config"]["replayGeneratorConfig"]["traceList"] = [str(block_trace_path.absolute())]
+
+
+    def get_upload_key(self, t1_size, t2_size, cur_iteration):
+        return "output_dump/{}/{}/{}_{}_{}_{}_{}_{}".format(self.machine_id, 
+                                                    self.workload_id,
+                                                    self.queue_size,
+                                                    self.thread_count,
+                                                    self.iat_scale_factor,
+                                                    t1_size, 
+                                                    t2_size, 
+                                                    cur_iteration)
 
     
     def fixed_step(self):
@@ -56,13 +122,32 @@ class Runner:
             max_tier2_size = diff_from_max_tier1_size_mb * self.size_multiplier
 
             for tier2_size_mb in reversed(range(tier2_step_size, max_tier2_size, tier2_step_size)):
+                # check if the needed T1 and T2 is possible 
+                if tier1_size_mb > self.args.ramSizeMB:
+                    print("Tier 1 size needed is too large!")
+                    continue 
+
+                if tier2_size_mb > self.args.nvmSizeMB:
+                    print("Tier 2 size needed is too large!")
+                    continue 
+
                 print(tier1_size_mb, tier2_size_mb)
-
                 # create a config file 
+                pass 
 
-                # upload the config file if it doesn't exist 
+                for current_iteration in range(self.iteration_count):
+                    upload_key = self.get_upload_key(tier1_size_mb, tier2_size_mb, current_iteration)
 
+                    # check if key already exists 
+                    if (self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=upload_key)['KeyCount'] == 0):
+                        print("Key does not exist {}".format(upload_key))
+                    else:
+                        print("Key exists {}".format(upload_key))
 
+                    # if it does no need for more work, if it doesn't then upload 
+                    pass
+
+                pass 
 
 
 
@@ -109,6 +194,11 @@ if __name__ == "__main__":
                             type=int,
                             help="Max memory available in the server in MB")
 
+    parser.add_argument("--nvmSizeMB",
+                            default=DEFAULT_NVM_LIMIT,
+                            type=int,
+                            help="Max space available in the server for NVM caching")
+
     parser.add_argument("--stepSizeMB",
                             type=int,
                             default=DEFAULT_STEP_SIZE_MB,
@@ -145,6 +235,18 @@ if __name__ == "__main__":
     parser.add_argument("--externalData",
                             default=DEFAULT_EXTERNAL_DATA,
                             help="File containing external data about the workload")
+
+    parser.add_argument("--configFilePath",
+                            default=DEFAULT_CONFIG_FILE_PATH,
+                            help="Path where configuration files are generated and read from")
+
+    parser.add_argument("--tag",
+                            default=DEFAULT_TAG,
+                            help="Tag to identify specific machines within instance types")
+
+    parser.add_argument("--bucketName",
+                            default=DEFAULT_BUCKET,
+                            help="Bucket name to upload results")
     
     args = parser.parse_args()
 
