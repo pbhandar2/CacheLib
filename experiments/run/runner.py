@@ -151,8 +151,10 @@ class Runner:
                 for current_iteration in range(self.iteration_count):
                     upload_key = self.get_upload_key(tier1_size_mb, tier2_size_mb, current_iteration)
 
+                    list_api_return = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=upload_key)
+
                     # check if key already exists 
-                    if (self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=upload_key)['KeyCount'] == 0):
+                    if (list_api_return['KeyCount'] == 0):
                         print("Key does not exist -> {}".format(upload_key))
 
                         # upload config to key 
