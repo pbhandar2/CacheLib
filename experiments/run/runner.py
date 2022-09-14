@@ -299,4 +299,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     runner = Runner(args)
-    runner.fixed_step()
+    runner.priority_mode()
