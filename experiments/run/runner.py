@@ -177,22 +177,22 @@ class Runner:
                         print("Key exists -> {}".format(upload_key))
 
 
-        def priority_mode(self):
-            # run configuration based on the order in a configuration priority file 
-            f = self.config_priority_file.open("r")
-            config_list = json.load(f)
-            for config_set in config_list:
-                thread_count_list = config_set["thread_count"]
-                iat_scale_factor_list = config_set["iat_scale_factor"]
-                queue_size_list = config_set["queue_size"]
-                size_multiplier_list = config_set["size_multiplier"]
+    def priority_mode(self):
+        # run configuration based on the order in a configuration priority file 
+        f = self.config_priority_file.open("r")
+        config_list = json.load(f)
+        for config_set in config_list:
+            thread_count_list = config_set["thread_count"]
+            iat_scale_factor_list = config_set["iat_scale_factor"]
+            queue_size_list = config_set["queue_size"]
+            size_multiplier_list = config_set["size_multiplier"]
 
-                for block_replay_config in itertools.product(*[thread_count_list, iat_scale_factor_list, queue_size_list, size_multiplier_list]):
-                    # run fixed step 
-                    self.thread_count, self.iat_scale_factor = block_replay_config[0], block_replay_config[1]
-                    self.queue_size, self.size_multiplier = block_replay_config[2], block_replay_config[3]
-                    self.fixed_step()
-            f.close()
+            for block_replay_config in itertools.product(*[thread_count_list, iat_scale_factor_list, queue_size_list, size_multiplier_list]):
+                # run fixed step 
+                self.thread_count, self.iat_scale_factor = block_replay_config[0], block_replay_config[1]
+                self.queue_size, self.size_multiplier = block_replay_config[2], block_replay_config[3]
+                self.fixed_step()
+        f.close()
 
 
 if __name__ == "__main__":
