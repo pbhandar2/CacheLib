@@ -41,6 +41,7 @@ DEFAULT_DISK_FILE_PATH = pathlib.Path.home().joinpath("disk", "disk.file")
 DEFAULT_NVM_FILE_PATH = pathlib.Path.home().joinpath("nvm", "disk.file")
 DEFAULT_CONFIG_FILE_PATH = pathlib.Path.home().joinpath("temp_config.json")
 DEFAULT_OUTPUT_DUMP_PATH = pathlib.Path.home().joinpath("temp_out.dump")
+DEFAULT_CONFIG_PRIORITY_FILE = pathlib.Path("config_priority.json")
 
 DEFAULT_EXTERNAL_DATA = pathlib.Path("../data/cp_block.csv")
 
@@ -62,6 +63,7 @@ class Runner:
         self.config_file_path = args.configFilePath
         self.output_dump_path = args.outputDumpPath
         self.run_cmd = args.runCMD
+        self.config_priority_file = args.configPriorityFile
 
         self.s3 = boto3.client('s3')
         self.bucket_name = args.bucketName
@@ -294,6 +296,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--bucketName",
                             default=DEFAULT_BUCKET,
+                            help="Bucket name to upload results")
+
+    parser.add_argument("--configPriorityFile",
+                            default=DEFAULT_CONFIG_PRIORITY_FILE,
                             help="Bucket name to upload results")
     
     args = parser.parse_args()
