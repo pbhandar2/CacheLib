@@ -1,8 +1,8 @@
 [
-    { "thread_count": [16], "iat_scale_factor": [1, 100], "queue_size": [128], "size_multiplier": [16, 8, 4] },
-    { "thread_count": [16], "iat_scale_factor": [1, 100], "queue_size": [64, 256], "size_multiplier": [16, 8, 4] },
-    { "thread_count": [16], "iat_scale_factor": [10, 1000, 5000], "queue_size": [128], "size_multiplier": [16, 8, 4] },
-    { "thread_count": [32], "iat_scale_factor": [1, 100], "queue_size": [128], "size_multiplier": [16, 8, 4] },
-    { "thread_count": [32], "iat_scale_factor": [1, 100], "queue_size": [64, 256], "size_multiplier": [16, 8, 4] },
-    { "thread_count": [32], "iat_scale_factor": [10, 1000, 5000], "queue_size": [128], "size_multiplier": [16, 8, 4] }
+    { "step_size_mb": [1000, 800, 400], "thread_count": [16], "iat_scale_factor": [1, 100], "queue_size": [128], "size_multiplier": [16, 8, 4] },
+    { "step_size_mb": [1000, 800, 400], "thread_count": [16], "iat_scale_factor": [1, 100], "queue_size": [64, 256], "size_multiplier": [16, 8, 4] },
+    { "step_size_mb": [1000, 800, 400], "thread_count": [16], "iat_scale_factor": [10, 1000, 5000], "queue_size": [128], "size_multiplier": [16, 8, 4] },
+    { "step_size_mb": [1000, 800, 400], "thread_count": [32], "iat_scale_factor": [1, 100], "queue_size": [128], "size_multiplier": [16, 8, 4] },
+    { "step_size_mb": [1000, 800, 400], "thread_count": [32], "iat_scale_factor": [1, 100], "queue_size": [64, 256], "size_multiplier": [16, 8, 4] },
+    { "step_size_mb": [1000, 800, 400], "thread_count": [32], "iat_scale_factor": [10, 1000, 5000], "queue_size": [128], "size_multiplier": [16, 8, 4] }
 ]

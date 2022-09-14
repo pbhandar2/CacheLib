@@ -222,15 +222,17 @@ class Runner:
         f = self.config_priority_file.open("r")
         config_list = json.load(f)
         for config_set in config_list:
+            step_size_list = config_set["step_size_mb"]
             thread_count_list = config_set["thread_count"]
             iat_scale_factor_list = config_set["iat_scale_factor"]
             queue_size_list = config_set["queue_size"]
             size_multiplier_list = config_set["size_multiplier"]
 
-            for block_replay_config in itertools.product(*[thread_count_list, iat_scale_factor_list, queue_size_list, size_multiplier_list]):
+            for block_replay_config in itertools.product(*[thread_count_list, iat_scale_factor_list, queue_size_list, size_multiplier_list, step_size_list]):
                 # run fixed step 
                 self.thread_count, self.iat_scale_factor = block_replay_config[0], block_replay_config[1]
                 self.queue_size, self.size_multiplier = block_replay_config[2], block_replay_config[3]
+                self.step_size_mb = block_replay_config[4]
                 self.fixed_step()
         f.close()
 
