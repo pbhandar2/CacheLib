@@ -179,6 +179,42 @@ class Runner:
 
                     else:
                         print("Key exists -> {}".format(upload_key))
+                        output_size = list_api_return['Contents'][0]['Size']
+                        if output_size < 1000:
+                            temp_output = pathlib.Path.home().joinpath("check_incomplete_output.out")
+                            try:
+                                self.s3.download_file(self.bucket_name, 
+                                                        upload_key, 
+                                                        str(temp_output))
+                            except ClientError as e:
+                                logging.error("Error: {} in download".format(e))                        
+                            
+                            temp_output_handle = temp_output.open("r")
+                            try:
+                                config_json = json.load(temp_output_handle)
+                                if "tag" in config_json["test_config"]:
+                                    if config_json["test_config"]["tag"] == self.tag:
+                                        print("This is a previously incomplete experiment for key {}".format(upload_key))
+                                        f = self.output_dump_path.open("w+")
+
+                                        # run the experiment 
+                                        p1 = subprocess.run([self.run_cmd, "--json_test_config", str(self.config_file_path)],
+                                                            stdout=f)
+
+                                        f.close()
+
+                                        # upload output to dump 
+                                        try:
+                                            self.s3.upload_file(str(self.output_dump_path), self.bucket_name, upload_key)
+                                        except ClientError as e:
+                                            logging.error("Error: {} in upload".format(e))
+                                    else:
+                                        print("Tag not present in file for key {}".format(upload_key))
+                            except:
+                                print("Error loading file {} so skipping!".format(upload_key))
+
+
+
 
 
     def priority_mode(self):
