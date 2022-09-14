@@ -141,11 +141,11 @@ class Runner:
                 # check if the needed T1 and T2 is possible 
                 if tier1_size_mb > self.args.ramSizeMB:
                     print("Tier 1 size needed is too large! Need: {} Max: {}".format(tier1_size_mb, self.args.ramSizeMB))
-                    continue 
+                    tier1_size_mb = self.args.ramSizeMB
 
                 if tier2_size_mb > self.args.nvmSizeMB:
                     print("Tier 2 size needed is too large! Need: {} Max: {}".format(tier2_size_mb, self.args.nvmSizeMB))
-                    continue 
+                    tier2_size_mb = self.args.nvmSizeMB
 
                 self.generate_config_file(tier1_size_mb, tier2_size_mb)
                 for current_iteration in range(self.iteration_count):
