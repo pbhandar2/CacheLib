@@ -56,7 +56,7 @@ else
 fi 
 
 if (( create_file_flag > 0 )); then
-    echo "Creating backing file of size ${backing_file_size_gb} MB"
+    echo "Creating backing file of size ${backing_file_size_gb} GB"
     dd if=/dev/urandom of=${backing_file_path} bs=1M count=$((${backing_file_size_gb}*1024)) oflag=direct 
     chmod a+rwx ${BACKING_DIR}/disk.file
 fi 
