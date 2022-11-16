@@ -230,7 +230,7 @@ class Runner:
                         exp_status_list.append(copy.deepcopy(exp_config))
         
         status_df = pd.DataFrame(exp_status_list)
-        print(status_df.nsmallest(10, 'status'))
+        self.print_tier_sizes_status()
         return status_df
     
 
