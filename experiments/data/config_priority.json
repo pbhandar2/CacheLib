@@ -1,0 +1,42 @@
+[
+    {
+        "thread_count": 16,
+        "queue_size": 128,
+        "iat_scale": 1
+    },
+    {
+        "thread_count": 16,
+        "queue_size": 128,
+        "iat_scale": 100
+    },
+    {
+        "thread_count": 16,
+        "queue_size": 256,
+        "iat_scale": 100
+    },
+    {
+        "thread_count": 16,
+        "queue_size": 256,
+        "iat_scale": 1
+    },
+    {
+        "thread_count": 32,
+        "queue_size": 256,
+        "iat_scale": 1
+    },
+    {
+        "thread_count": 32,
+        "queue_size": 256,
+        "iat_scale": 100
+    },
+    {
+        "thread_count": 32,
+        "queue_size": 128,
+        "iat_scale": 1
+    },
+    {
+        "thread_count": 32,
+        "queue_size": 128,
+        "iat_scale": 100
+    }
+]
