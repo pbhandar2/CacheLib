@@ -156,11 +156,12 @@ class MinT2Exp:
 
 
     def run_custom_files(self, step_size_gb=1):
-        # list of statuses of each tier 1 size evaluated 
-        experiment_status_list = []
         for custom_exp_list_file in self.config.min_t2_exp_dir.iterdir():
             # File name represents a workload (e.g. w97.csv)
             workload = custom_exp_list_file.stem 
+
+            # list of statuses of each tier 1 size evaluated 
+            experiment_status_list = []
 
             with custom_exp_list_file.open("r") as f:
                 """ Each line of the custom experiment list file 
@@ -195,7 +196,7 @@ class MinT2Exp:
                     # now binary search to find the smallest tier-2 size 
                     # that improves performance to the closest GB 
                     t2_limit_gb = self.config.get_t2_size_limit_gb(self.machine)
-                    t2_wss_gb = min(int(self.config.get_t2_wss_gb(workload)), t2_limit_gb)
+                    t2_wss_gb = int(min(self.config.get_t2_wss_gb(workload), t2_limit_gb))
 
                     if t2_wss_gb > t2_limit_gb:
                         # if wss is larger than the tier 2 limit
@@ -215,11 +216,15 @@ class MinT2Exp:
                         low = step_size_gb
                         high = t2_limit_gb
                     
+                    lock_flag = False 
                     while True:
                         exp_config["t2_size_mb"] = int(cur *1e3)
 
-                        # evaluate a tier-2 size 
+                        # evaluate a tier-2 size and break if locked 
                         mt_set = self.eval_set(exp_config)
+                        if mt_set is None:
+                            lock_flag = True 
+                            break 
 
                         # compare performance with ST 
                         mt_bandwidth = mt_set.get_mean_metric("bandwidth_byte/s")
@@ -240,11 +245,15 @@ class MinT2Exp:
                                 low = cur + 1 
                                 cur = math.floor((cur+high)/2)
 
-                    experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 1})
+                    if lock_flag:
+                        experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
+                    else:
+                        experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 1})
+
                     line = f.readline()
 
-        experiment_status = pd.DataFrame(experiment_status_list)
-        print(experiment_status)
+            experiment_status = pd.DataFrame(experiment_status_list)
+            print(experiment_status)
 
 
 if __name__ == "__main__":
