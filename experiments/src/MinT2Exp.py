@@ -182,7 +182,7 @@ class MinT2Exp:
                     # check if anything is pending and break if there is 
                     lock_flag = self.check_if_locked(exp_config)
                     if lock_flag:
-                        print("T1 size {} is locked!").format(t1_size_mb)
+                        print("T1 size {} is locked!".format(t1_size_mb))
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
                         line = f.readline()
                         continue 
@@ -190,7 +190,7 @@ class MinT2Exp:
                     # first make sure the ST set is done 
                     st_set = self.eval_set(exp_config)
                     if st_set is None:
-                        print("T1 size {} is locked!").format(t1_size_mb)
+                        print("T1 size {} is locked!".format(t1_size_mb))
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
                         line = f.readline()
                         continue 
@@ -250,10 +250,10 @@ class MinT2Exp:
                                 cur = math.floor((cur+high)/2)
 
                     if lock_flag:
-                        print("T1 size {} is locked!").format(t1_size_mb)
+                        print("T1 size {} is locked!".format(t1_size_mb))
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
                     else:
-                        print("T1 size {} is done!").format(t1_size_mb)
+                        print("T1 size {} is done!".format(t1_size_mb))
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 1})
 
                     line = f.readline()
