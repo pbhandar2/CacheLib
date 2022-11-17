@@ -183,13 +183,15 @@ class MinT2Exp:
                     lock_flag = self.check_if_locked(exp_config)
                     if lock_flag:
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
-                        break 
+                        line = f.readline()
+                        continue 
 
                     # first make sure the ST set is done 
                     st_set = self.eval_set(exp_config)
                     if st_set is None:
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
-                        break 
+                        line = f.readline()
+                        continue 
                     
                     st_bandwidth = st_set.get_mean_metric("bandwidth_byte/s")
 
