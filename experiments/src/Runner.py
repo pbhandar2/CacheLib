@@ -13,12 +13,13 @@ import subprocess
 
 class Runner:
     def __init__(self, machine, tag, aws_key, aws_secret):
+
         self.machine = machine 
         self.tag = tag 
         self.s3 = boto3.client('s3',
                                 aws_access_key_id=aws_key, 
                                 aws_secret_access_key=aws_secret)
-        self.config = Config()
+        self.config = Config(aws_key, aws_secret)
 
 
     def get_block_trace_path(self, workload):
@@ -190,16 +191,19 @@ class Runner:
     def run_custom_t1_sizes(self):
         global_config = self.config.get_default_config()
         global_config["machine"] = self.machine 
+        global_config["tag"] = self.tag 
 
         for custom_t1_sizes_file_path in self.config.custom_t1_size_dir.iterdir():
             # create a local copy of the global config
-            cur_config = copy.deepcopy(global_config)
+            exp_config = copy.deepcopy(global_config)
+            exp_config["workload"] = custom_t1_sizes_file_path.stem 
 
-            cur_config["workload"] = custom_t1_sizes_file_path.stem 
-            custom_t1_sizes_mb = self.config.get_custom_t1_sizes(cur_config["workload"])
-
+            custom_t1_sizes_mb = self.config.get_custom_t1_sizes(exp_config["workload"])
             for cur_t1_size_mb in custom_t1_sizes_mb:
-                cur_config["t1_size"] = cur_t1_size_mb
+                exp_config["t1_size"] = cur_t1_size_mb
+
+                # check if ST is done for this we would need overall 
+                # how to generate overall, but better lighter? 
 
                 # call the function to generate for this T1 size 
                 output_flag = self.run_t1_size(cur_config)
@@ -238,7 +242,6 @@ class Runner:
         status_df = self.run_custom_tier_sizes(data_only=True)
         print(status_df.nsmallest(25, 'status'))
         print(status_df[status_df["status"]<2000].nlargest(25, 'status'))
-
                         
 
 if __name__ == "__main__":
