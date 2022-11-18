@@ -4,7 +4,6 @@ import numpy as np
 
 """ The class reads an output dump from an experiment. """
 
-
 class ExperimentSet:
     def __init__(self, exp_list):
         self.exp_list = [ExperimentOutput(_) for _ in exp_list]
@@ -17,11 +16,8 @@ class ExperimentSet:
         return np.mean(metric_list)
 
     def print_output_file_list(self):
-        print("In experiment set")
-        print(self.exp_list)
         for exp in self.exp_list:
             print(exp._output_path)
-    
 
 
 class ExperimentOutput:
@@ -44,9 +40,6 @@ class ExperimentOutput:
         self.iat_scale_factor = 0 
         self.t2_hit_start = -1
         self.tag = "unknown"
-
-        # flag indicating whether the output is complete 
-        self.full_output = False 
 
         # read the file and load metrics 
         self._load()
@@ -112,17 +105,6 @@ class ExperimentOutput:
             if self.input_queue_size == 0 or self.iat_scale_factor == 0 or self.processor_thread_count == 0:
                 raise ValueError("Some cache parameter missing from file {}".format(self._output_path))
 
-        if self.is_output_complete():
-            self.full_output = True
-
-
-    def get_read_io_processed(self):
-        return self.ts_stat[max(self.ts_stat.keys())]["readIOProcessed"]
-
-
-    def get_write_io_processed(self):
-        return self.ts_stat[max(self.ts_stat.keys())]["writeIOProcessed"]
-
 
     def get_bandwidth(self):
         if self.bandwidth_key not in self.stat:
@@ -134,12 +116,8 @@ class ExperimentOutput:
         return self.stat["experimentTime_s"]
 
 
-    def metric_check(self, metric_name):
-        return metric_name in self.stat
-
-
     def get_metric(self, metric_name):
-        if not self.metric_check(metric_name):
+        if metric_name not in self.stat:
             return np.inf 
         return self.stat[metric_name]
 

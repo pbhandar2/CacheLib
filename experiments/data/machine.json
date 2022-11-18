@@ -11,8 +11,8 @@
         "name": "cl-ssd-0",
         "instance": "r6525",
         "memoryGB": 256,
-        "nvmGB": 480,
+        "nvmGB": 1500,
         "maxCacheSize": 200,
-        "maxNVMSize": 400
+        "maxNVMSize": 1100
     }
 ]
