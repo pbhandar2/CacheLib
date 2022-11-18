@@ -35,6 +35,7 @@ class MinT2Exp:
             raise ValueError("{}::(Error downloading object at {} with key {})".format(e, output_path, key))
 
 
+
     def get_key_size(self, key):
         list_api_return = self.s3.list_objects_v2(Bucket=self.config.s3_bucket_name, Prefix=key)
 
@@ -96,18 +97,33 @@ class MinT2Exp:
         return temp_output_file_path
             
 
-    def eval_set(self, exp_config):
+    def load_exp_set(self, exp_config):
+        """ This function loads outputs from multiple 
+            iterations of the same experiment. The 
+            experiments missing from the set are run.  
+        """
+
+        exp_set = None 
         exp_output_path_list = []
+        # load the number of iterations of the experiment needed to form a set 
         for it in range(self.config.it_limit):
             exp_config["it"] = it 
             load_result = self.load_temp_output_file(exp_config)
 
             if load_result is None:
-                return None 
+                # output file could not be loaded, abort 
+                break 
             else:
                 exp_output_path_list.append(load_result)
-        else:
-            return ExperimentSet(exp_output_path_list)
+
+        if len(exp_output_path_list) == self.config.it_limit:
+            exp_set = ExperimentSet(exp_output_path_list) 
+        
+        # clean up the files once we have the data we need 
+        for exp_output_path in exp_output_path_list:
+            exp_output_path.unlink()
+        
+        return exp_set
 
 
     def get_partial_key(self, exp_config):
@@ -188,7 +204,7 @@ class MinT2Exp:
                         continue 
 
                     # first make sure the ST set is done 
-                    st_set = self.eval_set(exp_config)
+                    st_set = self.load_exp_set(exp_config)
                     if st_set is None:
                         print("T1 size {} is locked!".format(t1_size_mb))
                         experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
@@ -225,7 +241,7 @@ class MinT2Exp:
                         exp_config["t2_size_mb"] = int(cur *1e3)
 
                         # evaluate a tier-2 size and break if locked 
-                        mt_set = self.eval_set(exp_config)
+                        mt_set = self.load_exp_set(exp_config)
                         if mt_set is None:
                             lock_flag = True 
                             break 
@@ -233,6 +249,7 @@ class MinT2Exp:
                         # compare performance with ST 
                         mt_bandwidth = mt_set.get_mean_metric("bandwidth_byte/s")
                         if mt_bandwidth > st_bandwidth:
+                            # performance improved so reduce the T2 size 
                             if cur == low:
                                 break 
                             elif cur-low == 1:
@@ -241,6 +258,7 @@ class MinT2Exp:
                                 high = cur -1 
                                 cur = math.floor((cur+low)/2)
                         else:
+                            # performance got worse so increase the T2 size 
                             if cur == high:
                                 break 
                             elif high-cur == 1:
