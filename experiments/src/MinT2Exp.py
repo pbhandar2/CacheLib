@@ -215,6 +215,21 @@ class MinT2Exp:
                     
                     st_bandwidth = st_set.get_mean_metric("bandwidth_byte/s")
 
+                    # try the max T2 size and if it doesn't improve performance move to next t1 size 
+                    exp_config["t2_size_mb"] = int(self.get_t2_size_limit_gb*1e3)
+                    max_t2_set = self.load_exp_set(exp_config)
+                    if max_t2_set is None:
+                        print("T1 size {} is locked!".format(t1_size_mb))
+                        experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 0})
+                        line = f.readline()
+                        continue 
+                    
+                    max_t2_bandwidth = max_t2_set.get_mean_metric("bandwidth_byte/s")
+                    if max_t2_bandwidth <= st_bandwidth:
+                        experiment_status_list.append({"workload": workload, "t1_size": t1_size_mb, "status": 1})
+                        line = f.readline()
+                        continue 
+
                     # now binary search to find the smallest tier-2 size 
                     # that improves performance to the closest GB 
                     t2_limit_gb = self.config.get_t2_size_limit_gb(self.machine)
