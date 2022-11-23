@@ -53,6 +53,28 @@ class Config:
         self.t1_wss_multiplier = 1.25 
         self.t2_wss_multiplier = 1.50 
         self.it_limit = 3 
+        self.config_priority_data = [
+            {
+                "thread_count": 16,
+                "queue_size": 128,
+                "iat_scale": 1
+            },
+            {
+                "thread_count": 16,
+                "queue_size": 128,
+                "iat_scale": 100
+            },
+            {
+                "thread_count": 16,
+                "queue_size": 256,
+                "iat_scale": 1
+            },
+            {
+                "thread_count": 32,
+                "queue_size": 128,
+                "iat_scale": 1
+            }
+        ]
 
 
     def download_s3_obj(self, key, output_path):
