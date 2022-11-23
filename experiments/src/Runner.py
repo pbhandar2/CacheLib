@@ -206,8 +206,8 @@ class Runner:
                     exp_config["t1_size_mb"] = custom_tier_sizes_row["t1_size_mb"]
                     exp_config["t2_size_mb"] = custom_tier_sizes_row["t2_size_mb"]
 
-                    for cur_itr in range(self.config.itr_count):
-                        exp_config["it"] = cur_itr
+                    for cur_it in range(self.config.it_limit):
+                        exp_config["it"] = cur_it
                         status = self.run(exp_config, data_only=data_only)
                         exp_config["status"] = status 
                         exp_status_list.append(copy.deepcopy(exp_config))
