@@ -4,6 +4,7 @@ import os
 import math 
 import pandas as pd 
 import numpy as np 
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -14,45 +15,32 @@ class Config:
                                 aws_access_key_id=aws_key, 
                                 aws_secret_access_key=aws_secret)
         
+        # the backing store and NVM device are mounted in a dir inside the home dir  
         self.home_dir = pathlib.Path.home()
+        self.nvm_file_path = self.home_dir.joinpath("nvm", "disk.file")
+        self.disk_file_path = self.home_dir.joinpath("disk", "disk.file")
 
-        # data for all experiments are stored in a directory 
+        # raw experiment outputs downloaded to a dir inside the home dir 
+        self.raw_data_dir = self.home_dir.joinpath("mtdata")
+
+        # data needed to run experiments are stored in self.experiment_data_dir
         self.experiment_data_dir = pathlib.Path().cwd().parent.joinpath("data")
-
-        # each experiment has a specific directory where their data is stored 
+        self.block_data_path = self.experiment_data_dir.joinpath("cp_block.csv")
         self.min_t2_exp_dir = self.experiment_data_dir.joinpath("min_t2_exp")
         self.custom_tier_size_data_dir = self.experiment_data_dir.joinpath("custom_tier_sizes")
         self.config_template_dir = self.experiment_data_dir.joinpath("config_templates")
-
-        # where experiment output files will be downloaded and stored if sync is run 
-        self.raw_data_dir = self.home_dir.joinpath("mtdata")
-
-        # temporary storage in memory 
-        self.temp_storage_dir = pathlib.Path("/dev/shm")
-
-        # load block features of the workloads 
-        self.block_data_path = self.experiment_data_dir.joinpath("cp_block.csv")
-        self.block_df = pd.read_csv(self.block_data_path)
-
-        # load features of the machines 
+        
         self.machine_data_file_path = self.experiment_data_dir.joinpath("machine.json")
         with self.machine_data_file_path.open("r") as f:
             self.machine_data = json.load(f)
 
-        # load configuration priority list 
-        self.config_priority_file_path = self.experiment_data_dir.joinpath("config_priority.json")
-        with self.config_priority_file_path.open("r") as f:
-            self.config_priority_data = json.load(f)
-
-        # block trace stored in the home directory be default 
-        self.block_trace_dir = self.home_dir
-
-        self.nvm_file_path = self.home_dir.joinpath("nvm", "disk.file")
-        self.disk_file_path = self.home_dir.joinpath("disk", "disk.file")
-
-        self.config_file_path = self.home_dir.joinpath("temp_config.json")
-        self.raw_output_file_path = self.home_dir.joinpath("temp_out.dump")
-
+        # temporary storage in memory 
+        self.temp_storage_dir = pathlib.Path("/dev/shm")
+        self.block_trace_dir = self.temp_storage_dir
+        self.config_file_path = self.temp_storage_dir.joinpath("temp_config.json")
+        self.raw_output_file_path = self.temp_storage_dir.joinpath("temp_out.dump")
+        
+        self.block_df = pd.read_csv(self.block_data_path)
         self.run_cachebench_cmd = "../../opt/cachelib/bin/cachebench"
         self.s3_bucket_name = "mtcachedata"
         self.base_workloads = ["w81", "w47", "w11", \
@@ -60,12 +48,38 @@ class Config:
                                 "w78", "w97", "w82", "w20", \
                                 "w31", "w77"]
 
-        self.s3 = boto3.client('s3')
+        # settings used in analysis 
         self.wss_pad_gb = 1
         self.t1_wss_multiplier = 1.25 
         self.t2_wss_multiplier = 1.50 
         self.it_limit = 3 
+
+
+    def download_s3_obj(self, key, output_path):
+        try:
+            self.s3.download_file(self.s3_bucket_name, 
+                                    key, 
+                                    output_path)
+        except ClientError as e:
+            raise ValueError("{}::(Error downloading object at {} with key {})".format(e, output_path, key))
+
     
+    def get_temp_file_path_from_key(self, key):
+        temp_file_name = key.replace("/", "_")
+        return self.temp_storage_dir.joinpath(temp_file_name[1:])
+
+    
+    def get_temp_file_path(self, exp_config):
+        temp_file_name = "{}_{}_{}_{}_{}_{}_{}_{}".format(exp_config['machine'],
+                                                            exp_config['workload'],
+                                                            exp_config['queue_size'],
+                                                            exp_config['thread_count'],
+                                                            exp_config['iat_scale'],
+                                                            exp_config['t1_size_mb'],
+                                                            exp_config['t2_size_mb'],
+                                                            exp_config['it'])
+        return self.temp_storage_dir.joinpath(temp_file_name)
+
 
     def get_wss_gb(self, workload_name):
         workload_row = self.block_df[self.block_df["workload"]==workload_name].iloc[0]

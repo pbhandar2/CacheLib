@@ -23,7 +23,7 @@ class Runner:
 
 
     def get_block_trace_path(self, workload):
-        return self.config.block_trace_dir.joinpath("block_{}.csv".format(workload))
+        return self.config.temp_storage_dir.joinpath("block_{}.csv".format(workload))
 
 
     def download_s3_obj(self, key, output_path):
@@ -188,27 +188,6 @@ class Runner:
         return key_size 
 
 
-    def run_custom_t1_sizes(self):
-        global_config = self.config.get_default_config()
-        global_config["machine"] = self.machine 
-        global_config["tag"] = self.tag 
-
-        for custom_t1_sizes_file_path in self.config.custom_t1_size_dir.iterdir():
-            # create a local copy of the global config
-            exp_config = copy.deepcopy(global_config)
-            exp_config["workload"] = custom_t1_sizes_file_path.stem 
-
-            custom_t1_sizes_mb = self.config.get_custom_t1_sizes(exp_config["workload"])
-            for cur_t1_size_mb in custom_t1_sizes_mb:
-                exp_config["t1_size"] = cur_t1_size_mb
-
-                # check if ST is done for this we would need overall 
-                # how to generate overall, but better lighter? 
-
-                # call the function to generate for this T1 size 
-                output_flag = self.run_t1_size(cur_config)
-
-    
     def run_custom_tier_sizes(self, data_only=False):
         exp_status_list = []
         custom_tier_size_data_dir = self.config.custom_tier_size_data_dir

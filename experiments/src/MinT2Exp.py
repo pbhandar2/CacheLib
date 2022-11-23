@@ -307,7 +307,7 @@ if __name__ == "__main__":
                             help="Machine type identification")
 
     parser.add_argument("tag",
-                            help="Workload identification")
+                            help="Identify the machine")
 
     parser.add_argument("awsKey",
                             help="AWS access key")
