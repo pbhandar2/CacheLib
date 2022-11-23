@@ -19,6 +19,7 @@ class Runner:
         self.s3 = boto3.client('s3',
                                 aws_access_key_id=aws_key, 
                                 aws_secret_access_key=aws_secret)
+        
         self.config = Config(aws_key, aws_secret)
 
 
@@ -238,16 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("awsSecret",
                             help="AWS secret key")
 
-    parser.add_argument("s",
-                            type=bool,
-                            default=False,
-                            help="Print status")
-
     args = parser.parse_args()
 
     runner = Runner(args.machine, args.tag, args.awsKey, args.awsSecret)
-
-    if args.s:
-        runner.print_tier_sizes_status()
-    else:
-        runner.run_custom_tier_sizes()
+    runner.run_custom_tier_sizes()
