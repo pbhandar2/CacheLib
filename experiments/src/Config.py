@@ -53,7 +53,7 @@ class Config:
         self.t1_wss_multiplier = 1.25 
         self.t2_wss_multiplier = 1.50 
         self.it_limit = 3 
-        self.config_priority_data = [
+        self.config_priority_list = [
             {
                 "thread_count": 16,
                 "queue_size": 128,
@@ -153,7 +153,7 @@ class Config:
 
 
     def get_default_app_config(self):
-        return self.config_priority_data[0]
+        return self.config_priority_list[0]
 
     
     def is_experiment_done(self, exp_config):
