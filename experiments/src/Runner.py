@@ -202,32 +202,32 @@ class Runner:
         """
 
         exp_status_list = []
-        for workload in self.config.base_workloads:
-            custom_tier_sizes_file = self.config.custom_tier_size_data_dir.joinpath("{}.csv".format(workload))
-            if not custom_tier_sizes_file.is_file():
-                continue 
-            
-            custom_tier_sizes_df = pd.read_csv(custom_tier_sizes_file, names=["workload", "t1_size_mb", "t2_size_mb"])
-            for _, custom_tier_sizes_row in custom_tier_sizes_df.iterrows():
-                exp_config = self.config.get_default_app_config()
-                exp_config["machine"] = self.machine 
-                exp_config["tag"] = self.tag 
-                exp_config["workload"] = workload
-                exp_config["t1_size_mb"] = custom_tier_sizes_row["t1_size_mb"]
-                exp_config["t2_size_mb"] = custom_tier_sizes_row["t2_size_mb"]
+        for exp_config in self.config.config_priority_list:
+            for workload in self.config.base_workloads:
+                custom_tier_sizes_file = self.config.custom_tier_size_data_dir.joinpath("{}.csv".format(workload))
+                if not custom_tier_sizes_file.is_file():
+                    continue 
+                
+                custom_tier_sizes_df = pd.read_csv(custom_tier_sizes_file, names=["workload", "t1_size_mb", "t2_size_mb"])
+                for _, custom_tier_sizes_row in custom_tier_sizes_df.iterrows():
+                    exp_config["machine"] = self.machine 
+                    exp_config["tag"] = self.tag 
+                    exp_config["workload"] = workload
+                    exp_config["t1_size_mb"] = custom_tier_sizes_row["t1_size_mb"]
+                    exp_config["t2_size_mb"] = custom_tier_sizes_row["t2_size_mb"]
 
-                for it in range(self.config.it_limit):
-                    exp_config["it"] = it
-                    status = self.run(exp_config, data_only=data_only)
-                    exp_config["status"] = status 
-                    # print the status of each experiment as we iterate 
-                    print(exp_config)
-                    exp_status_list.append(copy.deepcopy(exp_config))
-        
-        status_df = pd.DataFrame(exp_status_list)
-        status_df.to_csv(output_path)
-        # print few rows of the DataFrame 
-        print(status_df)
+                    for it in range(self.config.it_limit):
+                        exp_config["it"] = it
+                        status = self.run(exp_config, data_only=data_only)
+                        exp_config["status"] = status 
+                        # print the status of each experiment as we iterate 
+                        print(exp_config)
+                        exp_status_list.append(copy.deepcopy(exp_config))
+            
+            status_df = pd.DataFrame(exp_status_list)
+            status_df.to_csv(output_path)
+            # print few rows of the DataFrame 
+            print(status_df)
         return status_df
                         
 
