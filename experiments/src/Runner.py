@@ -207,7 +207,7 @@ class Runner:
             if not custom_tier_sizes_file.is_file():
                 continue 
             
-            custom_tier_sizes_df = pd.read_csv(custom_tier_sizes_file)
+            custom_tier_sizes_df = pd.read_csv(custom_tier_sizes_file, names=["workload", "t1_size_mb", "t2_size_mb"])
             for _, custom_tier_sizes_row in custom_tier_sizes_df.iterrows():
                 exp_config = self.config.get_default_app_config()
                 exp_config["machine"] = self.machine 
