@@ -8,11 +8,35 @@
         "maxNVMSize": 400
     },
     {
+        "name": "cl-hdd-1",
+        "instance": "c220g5",
+        "memoryGB": 192,
+        "nvmGB": 480,
+        "maxCacheSize": 150,
+        "maxNVMSize": 400
+    },
+    {
         "name": "cl-ssd-0",
         "instance": "r6525",
         "memoryGB": 256,
         "nvmGB": 1500,
         "maxCacheSize": 200,
         "maxNVMSize": 1100
+    },
+    {
+        "name": "cc-h-0",
+        "instance": "cc-hierarchy",
+        "memoryGB": 512,
+        "nvmGB": 1100,
+        "maxCacheSize": 450,
+        "maxNVMSize": 900
+    },
+    {
+        "name": "cc-04-0",
+        "instance": "c04",
+        "memoryGB": 64,
+        "nvmGB": 400,
+        "maxCacheSize": 50,
+        "maxNVMSize": 300
     }
 ]
