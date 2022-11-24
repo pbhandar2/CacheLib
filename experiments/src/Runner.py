@@ -13,8 +13,10 @@ import subprocess
 
 class Runner:
     def __init__(self, machine, tag, aws_key, aws_secret):
-
         self.machine = machine 
+        self.t1_size_limit_mb = self.config.get_t1_size_limit_mb(machine)
+        self.t2_size_limit_mb = self.config.get_t2_size_limit_gb(machine)
+
         self.tag = tag 
         self.s3 = boto3.client('s3',
                                 aws_access_key_id=aws_key, 
@@ -71,9 +73,6 @@ class Runner:
                                                                                     t1_size_mb,
                                                                                     t2_size_mb,
                                                                                     cur_itr))
-
-    
-
 
     
     def download_block_trace(self, workload):
@@ -218,7 +217,12 @@ class Runner:
 
                     for it in range(self.config.it_limit):
                         exp_config["it"] = it
-                        status = self.run(exp_config, data_only=data_only)
+                        if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
+                                exp_config["t2_size_mb"] > self.t2_size_limit_mb:
+                            status = -1 
+                        else:
+                            status = self.run(exp_config, data_only=data_only)
+                        
                         exp_config["status"] = status 
                         # print the status of each experiment as we iterate 
                         print(exp_config)
