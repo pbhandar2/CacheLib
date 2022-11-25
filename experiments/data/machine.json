@@ -32,7 +32,7 @@
         "maxNVMSize": 900
     },
     {
-        "name": "cc-04-0",
+        "name": "cc-c04-0",
         "instance": "c04",
         "memoryGB": 64,
         "nvmGB": 400,
