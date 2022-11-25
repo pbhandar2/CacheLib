@@ -130,7 +130,7 @@ class Config:
 
     def get_t1_size_limit_mb(self, machine):
         for machine_entry in self.machine_data:
-            if machine_entry["name"] == machine:
+            if machine_entry["instance"] == machine:
                 return int(machine_entry["maxCacheSize"]*1e3)
         else:
             raise ValueError("Machine not found: {}".format(machine))
