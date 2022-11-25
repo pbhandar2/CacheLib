@@ -12,8 +12,15 @@ set -o pipefail
 
 # {{{ Variables
 
-BACKING_DIR="${HOME}/disk"
-NVM_DIR="${HOME}/nvm"
+# user input 
+backing_dev_path=${1}
+nvm_dev_path=${2}
+backing_file_size_gb=${3}
+nvm_file_size_gb=${4} 
+home_dir=${5}
+
+BACKING_DIR="${home_dir}/disk"
+NVM_DIR="${home_dir}/nvm"
 
 if [[ ! -d ${BACKING_DIR} ]]; then 
     mkdir ${BACKING_DIR}
@@ -25,11 +32,6 @@ fi
 
 # }}}
 
-# user input 
-backing_dev_path=${1}
-nvm_dev_path=${2}
-backing_file_size_gb=${3}
-nvm_file_size_gb=${4} 
 
 # convert user input of file sizes in GB into bytes 
 backing_file_size_byte=$(( backing_file_size_gb * 1024 * 1024 * 1024))
