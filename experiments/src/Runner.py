@@ -201,8 +201,9 @@ class Runner:
         """
 
         exp_status_list = []
+        random.shuffle(self.config.base_workloads)
         for exp_config in self.config.config_priority_list:
-            for workload in random.shuffle(self.config.base_workloads):
+            for workload in self.config.base_workloads:
                 custom_tier_sizes_file = self.config.custom_tier_size_data_dir.joinpath("{}.csv".format(workload))
                 if not custom_tier_sizes_file.is_file():
                     continue 
