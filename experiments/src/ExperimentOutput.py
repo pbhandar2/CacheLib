@@ -22,24 +22,32 @@ class ExperimentSet:
 
 class ExperimentOutput:
     def __init__(self, experiment_output_path):
+        self.bandiwidth_key = "bandwidth_byte/s"
         self._output_path = pathlib.Path(experiment_output_path)
-        self._iteration_count = int(self._output_path.stem.split("_")[-1])
-
+        
         # overall stats
         self.stat = {}
 
-        self.bandiwidth_key = "bandwidth_byte/s"
-
-        # cache parameters 
+        # cache params
         self.nvm_cache_size_mb = 0 
         self.ram_cache_size_mb = 0 
         self.ram_alloc_size_byte = 0
         self.page_size_byte = 0 
-        self.input_queue_size = 0
-        self.processor_thread_count = 0 
-        self.iat_scale_factor = 0 
-        self.t2_hit_start = -1
+
+        # app params
+        self.queue_size = 0
+        self.thread_count = 0 
+
+        # inter-arrival time acceleration 
+        self.iat_scale = 1.0 
+
+        # tag to map output files to machines 
         self.tag = "unknown"
+
+        # iteration count 
+        self.it = int(self._output_path.stem.split("_")[-1])
+
+        self.error = False 
 
         # read the file and load metrics 
         self._load()
@@ -61,48 +69,51 @@ class ExperimentOutput:
                 elif 'stat:' in line:
                     pass 
                 else:
-                    # these are configuration parameters stored as JSON string in the output file 
-                    if "nvmCacheSizeMB" in line:
-                        split_line = line.split(":")
-                        self.nvm_cache_size_mb = int(split_line[1].replace(",", ""))
-                        self.stat["nvmCacheSizeMB"] = self.nvm_cache_size_mb
+                    try:
+                        # these are configuration parameters stored as JSON string in the output file 
+                        if "nvmCacheSizeMB" in line:
+                            split_line = line.split(":")
+                            self.nvm_cache_size_mb = int(split_line[1].replace(",", "").replace('"', ""))
+                            self.stat["nvmCacheSizeMB"] = self.nvm_cache_size_mb
 
-                    if "cacheSizeMB" in line:
-                        split_line = line.split(":")
-                        self.ram_cache_size_mb = int(split_line[1].replace(",", ""))
-                        self.stat["cacheSizeMB"] = self.ram_cache_size_mb
+                        if "cacheSizeMB" in line:
+                            split_line = line.split(":")
+                            self.ram_cache_size_mb = int(split_line[1].replace(",", ""))
+                            self.stat["cacheSizeMB"] = self.ram_cache_size_mb
 
-                    if "allocSizes" in line:
-                        self.ram_alloc_size_byte = int(f.readline().rstrip())
-                        self.stat["t1AllocSize"] = self.ram_alloc_size_byte
+                        if "allocSizes" in line:
+                            self.ram_alloc_size_byte = int(f.readline().rstrip())
+                            self.stat["t1AllocSize"] = self.ram_alloc_size_byte
 
-                    if "pageSizeBytes" in line:
-                        split_line = line.split(":")
-                        self.page_size_byte = int(split_line[1].replace(",", ""))
-                        self.stat["pageSizeBytes"] = self.page_size_byte
+                        if "pageSizeBytes" in line:
+                            split_line = line.split(":")
+                            self.page_size_byte = int(split_line[1].replace(",", ""))
+                            self.stat["pageSizeBytes"] = self.page_size_byte
 
-                    if "inputQueueSize" in line:
-                        split_line = line.split(":")
-                        self.input_queue_size = int(split_line[1].replace(",", ""))
-                        self.stat["inputQueueSize"] = self.input_queue_size
+                        if "inputQueueSize" in line:
+                            split_line = line.split(":")
+                            self.queue_size = int(split_line[1].replace(",", ""))
+                            self.stat["inputQueueSize"] = self.queue_size
 
-                    if "processorThreadCount" in line:
-                        split_line = line.split(":")
-                        self.processor_thread_count = int(split_line[1].replace(",", ""))
-                        self.stat["processorThreadCount"] = self.processor_thread_count
+                        if "processorThreadCount" in line:
+                            split_line = line.split(":")
+                            self.thread_count = int(split_line[1].replace(",", ""))
+                            self.stat["processorThreadCount"] = self.thread_count
 
-                    if "scaleIAT" in line:
-                        split_line = line.split(":")
-                        self.iat_scale_factor = int(split_line[1].replace(",", ""))
-                        self.stat["scaleIAT"] = self.iat_scale_factor 
-                    
-                    if "tag" in line:
-                        split_line = line.split(":")
-                        self.tag = split_line[1].replace(",", "")
+                        if "scaleIAT" in line:
+                            split_line = line.split(":")
+                            self.iat_scale = int(split_line[1].replace(",", ""))
+                            self.stat["scaleIAT"] = self.iat_scale 
+                        
+                        if "tag" in line:
+                            split_line = line.split(":")
+                            self.tag = split_line[1].replace(",", "").replace('"', '')
+                    except:
+                        self.error = True 
 
                 line = f.readline()
             
-            if self.input_queue_size == 0 or self.iat_scale_factor == 0 or self.processor_thread_count == 0:
+            if self.queue_size == 0 or self.iat_scale == 0 or self.thread_count == 0:
                 raise ValueError("Some cache parameter missing from file {}".format(self._output_path))
 
 
@@ -135,6 +146,9 @@ class ExperimentOutput:
     def get_t2_size_mb(self):
         return self.nvm_cache_size_mb
 
+    def get_error(self):
+        return self.error 
+
 
     def get_t1_size_mb(self):
         return self.ram_cache_size_mb
@@ -158,6 +172,19 @@ class ExperimentOutput:
 
     def get_row(self):
         return self.stat 
+
+
+    def get_exp_config(self):
+        exp_config = {
+            "queue_size": self.queue_size,
+            "thread_count": self.thread_count,
+            "iat_scale": self.iat_scale,
+            "t1_size_mb": self.ram_cache_size_mb,
+            "t2_size_mb": self.nvm_cache_size_mb,
+            "it": self.it,
+            "tag": self.tag 
+        }
+        return exp_config
 
 
     def __str__(self):

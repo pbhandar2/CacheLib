@@ -232,6 +232,49 @@ class Runner:
             status_df.to_csv(output_path)
             # print few rows of the DataFrame 
             print(status_df)
+        
+        return status_df
+
+
+    def run_queue_size(self, output_path="queue_size_exp_output.csv"):
+        queue_size_list = [64, 128, 256, 512, 1024]
+
+        exp_config = {}
+        exp_config['thread_count'] = 16 
+        exp_config['iat_scale'] = 1
+        exp_config['machine'] = self.machine
+        exp_config['tag'] = self.tag 
+
+        custom_tier_sizes_df = pd.read_csv(self.queue_size_exp_custom, names=["workload", "t1_size_mb", "t2_size_mb"])
+        exp_status_list = []
+        for queue_size in queue_size_list:
+            print("Q: {}".format(queue_size))
+
+            exp_config['queue_size'] = queue_size 
+
+            # read the experiments from a file 
+            for row_index, row in custom_tier_sizes_df.iterrows():
+                exp_config['workload'] = row['workload']
+                exp_config["t1_size_mb"] = row["t1_size_mb"]
+                exp_config["t2_size_mb"] = row["t2_size_mb"]
+
+                for it in range(self.config.it_limit):
+                    exp_config["it"] = it
+                    if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
+                            exp_config["t2_size_mb"] > self.t2_size_limit_mb:
+                        status = -1 
+                    else:
+                        status = self.run(exp_config)
+                    
+                    exp_config["status"] = status 
+                    # print the status of each experiment as we iterate 
+                    print(exp_config)
+                    exp_status_list.append(copy.deepcopy(exp_config))
+        
+        status_df = pd.DataFrame(exp_status_list)
+        status_df.to_csv(output_path)
+        # print few rows of the DataFrame 
+        print(status_df)
         return status_df
                         
 
@@ -253,4 +296,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     runner = Runner(args.machine, args.tag, args.awsKey, args.awsSecret)
+
+    
     runner.run_custom_tier_sizes()
