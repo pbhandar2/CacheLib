@@ -246,7 +246,7 @@ class Runner:
         exp_config['machine'] = self.machine
         exp_config['tag'] = self.tag 
 
-        custom_tier_sizes_df = pd.read_csv(self.queue_size_exp_custom, names=["workload", "t1_size_mb", "t2_size_mb"])
+        custom_tier_sizes_df = pd.read_csv(self.queue_size_exp_file, names=["workload", "t1_size_mb", "t2_size_mb"])
         exp_status_list = []
         for queue_size in queue_size_list:
             print("Q: {}".format(queue_size))
@@ -294,9 +294,14 @@ if __name__ == "__main__":
     parser.add_argument("awsSecret",
                             help="AWS secret key")
 
+    parser.add_argument("evalType", args='?', default='custom_tier_sizes',
+                            help="The type of experiments to run")
+
     args = parser.parse_args()
 
     runner = Runner(args.machine, args.tag, args.awsKey, args.awsSecret)
 
-    
-    runner.run_custom_tier_sizes()
+    if args.evalType == 'custom_tier_sizes':
+        runner.run_custom_tier_sizes()
+    else:
+        runner.run_queue_size()

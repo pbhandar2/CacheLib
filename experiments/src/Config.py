@@ -29,6 +29,7 @@ class Config:
         self.min_t2_exp_dir = self.experiment_data_dir.joinpath("min_t2_exp")
         self.custom_tier_size_data_dir = self.experiment_data_dir.joinpath("custom_tier_sizes")
         self.config_template_dir = self.experiment_data_dir.joinpath("config_templates")
+        self.queue_size_exp_file = self.experiment_data_dir.joinpath("custom_queue_size/test.csv")
         
         self.machine_data_file_path = self.experiment_data_dir.joinpath("machine.json")
         with self.machine_data_file_path.open("r") as f:
