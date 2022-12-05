@@ -294,7 +294,7 @@ if __name__ == "__main__":
     parser.add_argument("awsSecret",
                             help="AWS secret key")
 
-    parser.add_argument("evalType", args='?', default='custom_tier_sizes',
+    parser.add_argument("--evalType", default='custom_tier_sizes',
                             help="The type of experiments to run")
 
     args = parser.parse_args()
