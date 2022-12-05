@@ -246,7 +246,7 @@ class Runner:
         exp_config['machine'] = self.machine
         exp_config['tag'] = self.tag 
 
-        custom_tier_sizes_df = pd.read_csv(self.queue_size_exp_file, names=["workload", "t1_size_mb", "t2_size_mb"])
+        custom_tier_sizes_df = pd.read_csv(self.config.queue_size_exp_file, names=["workload", "t1_size_mb", "t2_size_mb"])
         exp_status_list = []
         for queue_size in queue_size_list:
             print("Q: {}".format(queue_size))
