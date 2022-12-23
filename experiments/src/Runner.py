@@ -218,6 +218,7 @@ class Runner:
 
                     for it in range(self.config.it_limit):
                         exp_config["it"] = it
+                        print("Evaluating: {}, {}, Limit: {}, {}".format(exp_config["t1_size_mb"], exp_config["t2_size_mb"], self.t1_size_limit_mb, self.t2_size_limit_mb))
                         if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
                                 exp_config["t2_size_mb"] > self.t2_size_limit_mb:
                             status = -1 
