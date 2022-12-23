@@ -22,7 +22,7 @@ class Runner:
         
         self.config = Config(aws_key, aws_secret)
         self.t1_size_limit_mb = self.config.get_t1_size_limit_mb(machine)
-        self.t2_size_limit_mb = self.config.get_t2_size_limit_gb(machine)
+        self.t2_size_limit_mb = self.config.get_t2_size_limit_mb(machine)
 
 
     def get_block_trace_path(self, workload):
