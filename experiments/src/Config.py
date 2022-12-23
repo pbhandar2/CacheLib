@@ -31,7 +31,7 @@ class Config:
         self.config_template_dir = self.experiment_data_dir.joinpath("config_templates")
         self.queue_size_exp_file = self.experiment_data_dir.joinpath("custom_queue_size/test.csv")
         
-        self.machine_data_file_path = self.experiment_data_dir.joinpath("machine.json")
+        self.machine_data_file_path = self.experiment_data_dir.joinpath("../data/machine.json")
         with self.machine_data_file_path.open("r") as f:
             self.machine_data = json.load(f)
 
