@@ -44,7 +44,7 @@ class Config:
         self.block_df = pd.read_csv(self.block_data_path)
         self.run_cachebench_cmd = "../../opt/cachelib/bin/cachebench"
         self.s3_bucket_name = "mtcachedata"
-        self.base_workloads = ['w18', 'w14', 'w82', 'w98', 'w54', 'w47', 'w20', 'w11', 'w81', 'w46', 'w32', 'w53', 'w68', 'w36']
+        self.base_workloads = ['w36', 'w18', 'w14', 'w53', 'w32', 'w20', 'w82', 'w98', 'w46', 'w54', 'w11', 'w47', 'w81', 'w68']
 
         # settings used in analysis 
         self.wss_pad_gb = 1
