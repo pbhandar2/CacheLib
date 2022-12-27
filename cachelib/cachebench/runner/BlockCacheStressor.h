@@ -732,12 +732,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
 
     void processWrite(BlockRequest& req, BlockReplayStats& stats) {
-        for (int curPage=req.getStartPage(); curPage<=req.getEndPage(); curPage++) {
-            const std::string key = std::to_string(curPage);
-            cache_->remove(key);
-        }
-
-
         // check the alignment in the front and rear page to see if read is needed 
         uint64_t index = req.getKey();
         uint64_t frontMisalignment = req.getFrontAlignment();
@@ -765,6 +759,12 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             } else {
                 req.addCacheMissByteRange(endPageOffset, config_.pageSizeBytes, false);
             }
+        }
+
+        // invalidate the keys 
+        for (int curPage=req.getStartPage(); curPage<=req.getEndPage(); curPage++) {
+            const std::string key = std::to_string(curPage);
+            cache_->remove(key);
         }
 
         req.addCacheMissByteRange(req.getOffset(), req.getSize(), true);
