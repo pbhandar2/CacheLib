@@ -498,11 +498,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     }
 
 
-    void removeKey() {
-
-    }
-
-
     void removeAsyncIORequest(uint64_t index) {
         const std::lock_guard<std::mutex> l(backingRequestMutex_);
         backingRequestVec_.at(index).reset();
