@@ -733,10 +733,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 
     void processWrite(BlockRequest& req, BlockReplayStats& stats) {
         for (int curPage=req.getStartPage(); curPage<=req.getEndPage(); curPage++) {
-            if (isPageInCache(curPage)) {
-                const std::string key = std::to_string(curPage);
-                cache_->remove(key);
-            }
+            const std::string key = std::to_string(curPage);
+            cache_->remove(key);
         }
 
 
