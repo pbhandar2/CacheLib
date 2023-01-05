@@ -238,6 +238,36 @@ class Runner:
         return status_df
 
 
+    def run_custom_file(self, custom_file_path='../data/custom_file/exp.csv', all_params=True):
+        queue_size_list = [64, 128, 256, 512, 1024]
+        replay_rate_list = [1, 10, 100, 1000]
+
+        exp_config = {}
+        exp_config['thread_count'] = 16 
+        exp_config['machine'] = self.machine
+        exp_config['tag'] = self.tag 
+
+        custom_exp_df = pd.read_csv(custom_file_path)
+        for row_index, row in custom_exp_df.iterrows():
+            exp_config['workload'] = row['workload']
+            exp_config["t1_size_mb"] = row["t1_size_mb"]
+            exp_config["t2_size_mb"] = row["t2_size_mb"]
+            for queue_size in queue_size_list:
+                for replay_rate in replay_rate_list:
+                    exp_config['queue_size'] = queue_size 
+                    exp_config['iat_scale'] = replay_rate
+
+                    for it in range(self.config.it_limit):
+                        exp_config["it"] = it
+                        if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
+                                exp_config["t2_size_mb"] > self.t2_size_limit_mb:
+                            status = -1 
+                        else:
+                            print("We are running")
+                            print(exp_config)
+                            status = self.run(exp_config)
+
+
     def run_queue_size(self, output_path="queue_size_exp_output.csv"):
         queue_size_list = [64, 128, 256, 512, 1024]
 
@@ -304,5 +334,7 @@ if __name__ == "__main__":
 
     if args.evalType == 'custom_tier_sizes':
         runner.run_custom_tier_sizes()
-    else:
+    elif args.evalType == 'custom_queue_size':
         runner.run_queue_size()
+    else:
+        runner.run_custom_file()
