@@ -241,31 +241,33 @@ class Runner:
     def run_custom_file(self, custom_file_path='../data/custom_file/exp.csv', all_params=True):
         queue_size_list = [64, 128, 256, 512, 1024]
         replay_rate_list = [1, 10, 100, 1000]
+        thread_count_list = [8, 16, 32, 64]
 
         exp_config = {}
-        exp_config['thread_count'] = 16 
         exp_config['machine'] = self.machine
         exp_config['tag'] = self.tag 
 
         custom_exp_df = pd.read_csv(custom_file_path)
-        for row_index, row in custom_exp_df.iterrows():
+        for row_index, row in custom_exp_df.sample(frac=1).iterrows():
             exp_config['workload'] = row['workload']
             exp_config["t1_size_mb"] = row["t1_size_mb"]
             exp_config["t2_size_mb"] = row["t2_size_mb"]
             for queue_size in queue_size_list:
                 for replay_rate in replay_rate_list:
-                    exp_config['queue_size'] = queue_size 
-                    exp_config['iat_scale'] = replay_rate
+                    for thread_count in thread_count_list:
+                        exp_config['queue_size'] = queue_size 
+                        exp_config['iat_scale'] = replay_rate
+                        exp_config['thread_count'] = thread_count
 
-                    for it in range(self.config.it_limit):
-                        exp_config["it"] = it
-                        if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
-                                exp_config["t2_size_mb"] > self.t2_size_limit_mb:
-                            status = -1 
-                        else:
-                            print("We are running")
-                            print(exp_config)
-                            status = self.run(exp_config)
+                        for it in range(self.config.it_limit):
+                            exp_config["it"] = it
+                            if exp_config["t1_size_mb"] > self.t1_size_limit_mb or \
+                                    exp_config["t2_size_mb"] > self.t2_size_limit_mb:
+                                status = -1 
+                            else:
+                                print("We are running")
+                                print(exp_config)
+                                status = self.run(exp_config)
 
 
     def run_queue_size(self, output_path="queue_size_exp_output.csv"):
