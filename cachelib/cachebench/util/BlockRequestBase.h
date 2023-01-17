@@ -316,7 +316,10 @@ class BlockRequest {
 
 
         void asyncReturn(iocb* iocbPtr, uint64_t asyncOffset, uint64_t asyncSize, bool writeFlag) {
+            // callback when an async IO represented by a pointer to struct iocb returns 
+
             std::lock_guard<std::mutex> l(updateMutex_);
+
             bool found = false; 
             uint64_t asyncEndOffset = asyncOffset + asyncSize;
             // find the async IO to which it belongs by iterating over missing byte ranges 
@@ -332,7 +335,7 @@ class BlockRequest {
                     if (missByteRangeStartOffset >= maxDiskFileOffset_) {
                         missByteRangeStartOffset = missByteRangeStartOffset % maxDiskFileOffset_;
                     }
-                    if (missByteRangeStartOffset+missByteRangeSize > maxDiskFileOffset_) {
+                    if (missByteRangeStartOffset + missByteRangeSize > maxDiskFileOffset_) {
                         missByteRangeStartOffset = 0;
                     }
                 }
@@ -382,6 +385,9 @@ class BlockRequest {
 
 
         std::vector<std::tuple<uint64_t, uint64_t, bool>> getAsyncIO() {
+            // get a vector of async IO requests that needs to be submitted for this block request 
+            // the range of bytes of cache misses are already updated in this class by now 
+
             std::lock_guard<std::mutex> l(updateMutex_);
             std::vector<std::tuple<uint64_t, uint64_t, bool>> asyncIOVec;
             // get all async IO request to be submitted for each cache miss / write request 
