@@ -170,6 +170,18 @@ struct CacheConfig : public JSONConfig {
   // disabled when value is 0
   uint32_t navyAdmissionWriteRateMB{0};
 
+  // dynamic-random admission policy: limit the write rate to tier-2 cache device 
+  uint32_t navyMaxDeviceWriteRateMB{0};
+
+  // reject first admission policy params 
+  bool navySetRejectFirstAP = false;
+  uint32_t navyRejectFirstAPEntryCount{10};
+  uint32_t navyRejectFirstAPSplitCount{10};
+  bool navyRejectFirstAPDRAMHints = true; 
+
+  // random admission probability with the mentioned probability 
+  double navyAdmissionProbability{0.0};
+
   // maximum pending inserts before rejecting new inserts.
   uint32_t navyMaxConcurrentInserts{1000000};
 

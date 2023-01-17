@@ -17,7 +17,6 @@ namespace cachebench {
 struct AsyncIORequest {
     AsyncIORequest() {}
 
-
     ~AsyncIORequest() {
         if (size_ > 0) {
             if (tracker_ != nullptr)
@@ -101,6 +100,7 @@ struct AsyncIORequest {
     iocb *iocbPtr_;
     facebook::cachelib::util::LatencyTracker *tracker_ = nullptr;
 };
+
 
 
 class BlockRequest {
@@ -243,37 +243,6 @@ class BlockRequest {
             }
             return doneFlag; 
         }
-
-
-        // bool isBlockRequestProcessed() {
-        //     std::lock_guard<std::mutex> l(updateMutex_);
-        //     bool doneFlag = false; 
-        //     if (op_ == OpType::kGet) {
-        //         uint64_t totalIOProcessed = hitBytes_+readAsyncBytes_;
-        //         if (totalIOProcessed > totalIO_) {
-        //             throw std::runtime_error(folly::sformat("Excess read -> {}\n", printStatus()));
-        //         } else if (totalIOProcessed == totalIO_) {
-        //             doneFlag = true; 
-        //         }
-        //     } else if (op_ == OpType::kSet) {
-        //         uint64_t totalIOProcessed = hitBytes_+writeAsyncBytes_+readAsyncBytes_;
-        //         if (totalIOProcessed == totalIO_) {
-        //             doneFlag = true; 
-        //         } else if (totalIOProcessed > totalIO_) {
-        //             throw std::runtime_error(folly::sformat("Excess write -> {}\n", printStatus()));
-        //         }
-        //     } else {
-        //         throw std::runtime_error(folly::sformat("Unknown req isBlockProcessed()\n"));
-        //     }
-
-        //     if (missCount_ == returnCount_) {
-        //         if (!doneFlag) {
-        //             throw std::runtime_error(folly::sformat("Should be done but isn't \n"));
-        //         }
-        //     }
-
-        //     return doneFlag; 
-        // }
 
 
         uint64_t getTotalIO() {

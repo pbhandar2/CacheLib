@@ -149,7 +149,7 @@ struct Stats {
 
     if (numCacheGets > 0) {
       out << folly::sformat("Cache Gets    : {:,}", numCacheGets) << std::endl;
-      out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
+      out << folly::sformat("Hit Ratio     : {:6.6f}%", overallHitRatio)
           << std::endl;
 
       if (FLAGS_report_api_latency) {
@@ -182,8 +182,8 @@ struct Stats {
       const double nvmHitRatio = invertPctFn(numNvmGetMiss, numNvmGets);
 
       out << folly::sformat(
-          "RAM Hit Ratio : {:6.2f}%\n"
-          "NVM Hit Ratio : {:6.2f}%\n",
+          "RAM Hit Ratio : {:6.6f}%\n"
+          "NVM Hit Ratio : {:6.6f}%\n",
           ramHitRatio, nvmHitRatio);
 
       out << folly::sformat(

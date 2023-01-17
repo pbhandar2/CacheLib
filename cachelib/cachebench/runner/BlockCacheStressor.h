@@ -371,8 +371,8 @@ class BlockCacheStressor : public BlockCacheStressorBase {
         const uint64_t nvmItemCount = cacheStats.getNVMItemCount();
         std::cout << folly::sformat("t1PageCount={},", ramItemCount);
         std::cout << folly::sformat("t2PageCount={},", nvmItemCount);
-        std::cout << folly::sformat("t1HitRate={:3.2f},",cacheStats.getHitRate());
-        std::cout << folly::sformat("t2HitRate={:3.2f},",cacheStats.getNVMHitRate());
+        std::cout << folly::sformat("t1HitRate={:3.8f},",cacheStats.getHitRate());
+        std::cout << folly::sformat("t2HitRate={:3.8f},",cacheStats.getNVMHitRate());
 
         std::ostream& out = std::cout;
         auto printLatencies =
@@ -686,36 +686,6 @@ class BlockCacheStressor : public BlockCacheStressorBase {
                         std::get<1>(asyncIO), 
                         stats);
             }
-            // for (std::tuple<uint64_t, uint64_t> miss : cacheMissVec) {
-            //     doRead(index, 
-            //             std::get<0>(miss), 
-            //             std::get<1>(miss), 
-            //             stats);
-            // }
-
-            // auto testMiss = req.getMissByteRangeVec();
-            // for (uint64_t curMissCount=0; curMissCount<cacheMissCount; curMissCount++) {
-
-            //     uint64_t missVecOffset = std::get<0>(cacheMissVec.at(curMissCount));
-            //     uint64_t missVecSize = std::get<1>(cacheMissVec.at(curMissCount));
-
-            //     uint64_t missTestOffset = std::get<0>(testMiss.at(curMissCount));
-            //     uint64_t missTestSize = std::get<1>(testMiss.at(curMissCount));
-
-            //     uint64_t asyncOffset = std::get<0>(asyncIOVec.at(curMissCount));
-            //     uint64_t asyncIOSize = std::get<1>(asyncIOVec.at(curMissCount));
-
-            //     std::cout << folly::sformat("{}/{}/{} and {}/{}/{}\n", 
-            //                                     missVecOffset, 
-            //                                     asyncOffset, 
-            //                                     missTestOffset,
-            //                                     missVecSize, 
-            //                                     asyncIOSize,
-            //                                     missTestSize);
-
-            // }
-
-
         }        
     }
 

@@ -191,11 +191,17 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
     nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
                                                    config_.navyWriterThreads);
+    
+    if (config_.navyMaxDeviceWriteRateMB > 0) {
+      nvmConfig.navyConfig.enableDynamicRandomAdmPolicy().setAdmWriteRate(config_.navyMaxDeviceWriteRateMB * MB).setMaxWriteRate(config_.navyMaxDeviceWriteRateMB * MB);
+    } 
 
-    if (config_.navyAdmissionWriteRateMB > 0) {
-      nvmConfig.navyConfig.enableDynamicRandomAdmPolicy().setAdmWriteRate(
-          config_.navyAdmissionWriteRateMB * MB);
+    if (config_.navyAdmissionProbability > 0) {
+      nvmConfig.navyConfig.enableRandomAdmPolicy().setAdmProbability(config_.navyAdmissionProbability);
     }
+
+
+
     nvmConfig.navyConfig.setMaxConcurrentInserts(
         config_.navyMaxConcurrentInserts);
 
@@ -208,6 +214,12 @@ Cache<Allocator>::Cache(const CacheConfig& config,
                << folly::toPrettyJson(
                       folly::toDynamic(nvmConfig.navyConfig.serialize()));
     allocatorConfig_.enableNvmCache(nvmConfig);
+
+
+    if (config_.navySetRejectFirstAP) {
+      allocatorConfig_.enableRejectFirstAPForNvm(config_.navyRejectFirstAPEntryCount, config_.navyRejectFirstAPSplitCount, 0, config_.navyRejectFirstAPDRAMHints);
+    }
+
 
     if (config_.navyEncryption && config_.createEncryptor) {
       allocatorConfig_.enableNvmCacheEncryption(config_.createEncryptor());
