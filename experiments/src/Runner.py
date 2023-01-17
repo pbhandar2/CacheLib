@@ -440,7 +440,6 @@ class Runner:
                         self.upload_s3_obj(key_dict['done'], str(self.output_file_path))
                         self.upload_s3_obj(key_dict['usage'], str(self.memory_cpu_usage_file_path))
                         self.delete_s3_obj(key_dict['live'])
-
                     return 1 
                 else:
                     if self.s3 is not None:

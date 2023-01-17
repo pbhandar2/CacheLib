@@ -1,0 +1,31 @@
+{
+    "cache_config": {
+        "cacheSizeMB": 1000,
+        "lruUpdateOnWrite": true, 
+        "allocSizes": [4136],
+        "nvmCacheSizeMB": 5000,
+        "nvmCachePaths": ["/users/pbhandar/nvm/disk.file"],
+        "navySizeClasses": [],
+        "navyBigHashSizePct": 0,
+        "navyBlockSize": 4096,
+        "truncateItemToOriginalAllocSizeInNvm": true, 
+        "printNvmCounters": true
+    },
+    "test_config": {
+        "populateItem": true, 
+        "generator": "multi-replay",
+        "numThreads": 1,
+        "inputQueueSize": 128,
+        "processorThreadCount": 16,
+        "asyncIOTrackerThreadCount": 16,
+        "traceBlockSizeBytes": 512, 
+        "pageSizeBytes": 4096,
+        "statPrintDelaySec": 30,
+        "relativeTiming": true, 
+        "scaleIAT": 1,
+        "diskFilePath": "/users/pbhandar/disk/disk.file",
+        "replayGeneratorConfig": {
+            "traceList": ["/dev/shm/block_w32.csv"]
+        }
+    }
+}
