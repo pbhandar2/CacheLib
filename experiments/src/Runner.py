@@ -90,8 +90,8 @@ class Runner:
             This will prevent the shared memory directory increasing too much in size. 
             If we are not using S3, this can serve as an input directory for traces
             and also where experiment output will be stored. """
-        if self.s3 is not None:
-            self.reset_experiment_dir()
+        # if self.s3 is not None:
+        #     self.reset_experiment_dir()
 
     
     def reset_experiment_dir(self):
