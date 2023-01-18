@@ -25,7 +25,7 @@
         "scaleIAT": 1,
         "diskFilePath": "/users/pbhandar/disk/disk.file",
         "replayGeneratorConfig": {
-            "traceList": ["/dev/shm/block_w32.csv"]
+            "traceList": ["/dev/shm/cachelib-runner/block_w32.csv"]
         }
     }
 }

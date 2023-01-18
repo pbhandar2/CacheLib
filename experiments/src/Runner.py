@@ -22,6 +22,7 @@ import copy
 import math 
 import time 
 import socket 
+import shutil
 import psutil 
 import itertools
 import json 
@@ -140,6 +141,8 @@ class Runner:
 
     
     def download_block_trace(self, workload):
+        """
+        """
         block_trace_path = self.get_block_trace_path(workload)
         if not block_trace_path.is_file():
             print("Block trace file does not exist {} downloading ..".format(block_trace_path))
@@ -152,6 +155,15 @@ class Runner:
 
 
     def get_base_experiment_df(self):
+        """ From the list of parameters, workloads and tier sizes listed in the 
+            experiment configuration file for experiments titled "base_experiment". 
+
+            Return
+            ------
+            df : pandas.DataFrame 
+                pandas DataFrame where each row represents an experiments that needs to be run 
+        """
+
         all_experiment_params = itertools.product(*[self.config["clean_regions"],
                                                         self.config["thread_count"],
                                                         self.config["replay_rate"],
@@ -347,24 +359,19 @@ class Runner:
                 break 
         return experiment_has_already_started_flag
 
-
-    def unpack_tuple(self, nt):
-        name_list = []
-        value_list = []
-        for field_name in nt._fields:
-            value = getattr(nt, field_name)
-            if type(value) == str:
-                name_list.append(field_name)
-                value_list.append(value)
-        return name_list, value_list 
-
         
     def snap_system_stats(self, usage_handle):
         """ Snap the memory, cpu and disk stats and write it to a logfile. 
         """
 
         mem_stats = psutil.virtual_memory()
-        column_list, value_list = self.unpack_tuple(mem_stats)
+
+        column_list, value_list = [], []
+        for mem_stat_field in mem_stats._fields:
+            mem_stat_value = getattr(mem_stats, mem_stat_field)
+            if type(mem_stat_value) == str:
+                column_list.append(mem_stat_field)
+                value_list.append(mem_stat_value)
 
         cpu_stats = psutil.cpu_percent(percpu=True)
         cpu_stat_name = ["cpu_util_{}".format(_) for _ in range(len(cpu_stats))]
