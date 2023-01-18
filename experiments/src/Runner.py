@@ -410,7 +410,7 @@ class Runner:
         # machines also running the same experiment and download the block
         if self.s3 is not None:
             self.upload_s3_obj(key_dict['live'], str(self.cachebench_config_file_path))
-            self.download_block_trace(cachebench_config["test_config"]["replayGeneratorConfig"]["traceList"][0])
+            self.download_block_trace(pathlib.Path(cachebench_config["test_config"]["replayGeneratorConfig"]["traceList"][0]))
 
         # run the experiment and track its memory, CPU usage
         # fail smoothly if block replay failed 
