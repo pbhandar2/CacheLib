@@ -418,7 +418,7 @@ class BlockRequest {
                 bool writeFlag = std::get<2>(missByteRangeEntry);
 
                 if (alignedSize > maxDiskFileOffset_) {
-                    throw std::runtime_error(folly::sformat("Size too large for the size of disk file"));
+                    throw std::runtime_error(folly::sformat("Size {} too large for the size of disk file with max offset", alignedSize, maxDiskFileOffset_));
                 }
 
                 if (alignedOffset + alignedSize >= maxDiskFileOffset_) {
