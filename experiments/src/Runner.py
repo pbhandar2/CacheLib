@@ -34,8 +34,6 @@ import pandas as pd
 import boto3
 from botocore.exceptions import ClientError
 
-from Config import Config 
-
 
 class Runner:
     def __init__(self, machine, experiment_name, experiment_config_file, aws_key, aws_secret):
