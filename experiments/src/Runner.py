@@ -138,10 +138,8 @@ class Runner:
             return int(list_api_return['Contents'][0]['Size'])
 
     
-    def download_block_trace(self, workload):
-        """
-        """
-        block_trace_path = self.get_block_trace_path(workload)
+    def download_block_trace(self, block_trace_path):
+        workload = pathlib.Path(block_trace_path).stem
         if not block_trace_path.is_file():
             print("Block trace file does not exist {} downloading ..".format(block_trace_path))
             self.download_s3_obj("block_trace/{}.csv".format(workload), str(block_trace_path))
