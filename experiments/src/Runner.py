@@ -314,6 +314,7 @@ class Runner:
         config["test_config"]["replayGeneratorConfig"] = {
             "traceList": [str(block_trace_path.absolute())]
         }
+        config["test_config"]["tag"] = self.tag
 
         return config, key_dict
 
