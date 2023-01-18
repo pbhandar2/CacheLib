@@ -60,6 +60,10 @@ class Runner:
 
         # NOTE: HARDCODED using the shared memory as a directory for experiment output 
         self.runner_dir = pathlib.Path("/dev/shm/cachelib-runner")
+
+        if not self.runner_dir.exist():
+            self.runner_dir.mkdir()
+            
         self.cachebench_config_file_path = self.runner_dir.joinpath("cachebench_config.json")
         self.output_file_path = self.runner_dir.joinpath("current_experiment_output.txt")
         self.memory_cpu_usage_file_path = self.runner_dir.joinpath("memory_cpu_usage.csv")
@@ -101,7 +105,7 @@ class Runner:
 
 
     def get_block_trace_path(self, workload):
-        return self.runner_dir.joinpath("{}.csv".format(workload))
+        return self.runner_dir.joinpath("block_{}.csv".format(workload))
 
 
     def download_s3_obj(self, key, output_path):
