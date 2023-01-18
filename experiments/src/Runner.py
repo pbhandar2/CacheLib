@@ -101,7 +101,7 @@ class Runner:
 
 
     def get_block_trace_path(self, workload):
-        return self.runner_dir.joinpath("block_{}.csv".format(workload))
+        return self.runner_dir.joinpath("{}.csv".format(workload))
 
 
     def download_s3_obj(self, key, output_path):
