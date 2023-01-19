@@ -23,6 +23,7 @@
         "statPrintDelaySec": 30,
         "relativeTiming": true, 
         "scaleIAT": 1,
+        "maxDiskOffset": 1020000000000, 
         "diskFilePath": "/users/pbhandar/disk/disk.file",
         "replayGeneratorConfig": {
             "traceList": ["/dev/shm/cachelib-runner/block_w98.csv"]
