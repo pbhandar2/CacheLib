@@ -88,6 +88,7 @@ class Runner:
 
         self.tag = socket.gethostname()
 
+        # TODO: cleanup this mess 
         """ Only reset the experiment directory if we are using S3. This means that
             we will be downloading traces from S3 and the directory is reset to 
             remove all relevant files of an experiment once it is uploaded to S3. 
@@ -106,10 +107,6 @@ class Runner:
 
     def get_block_trace_path(self, workload):
         return self.runner_dir.joinpath("{}.csv".format(workload))
-
-    
-    def get_block_trace_key(self, block_trace_path):
-        pass 
 
 
     def download_s3_obj(self, key, output_path):
@@ -311,6 +308,7 @@ class Runner:
         config["test_config"]["relativeTiming"] = True 
         config["test_config"]["scaleIAT"] = experiment_params['replay_rate']
         config["test_config"]["diskFilePath"] = self.machine_details["disk_file_path"]
+        config["test_config"]["maxDiskFileOffset"] = pathlib.Path(self.machine_details["disk_file_path"]).expanduser().stat().st_size
         config["test_config"]["replayGeneratorConfig"] = {
             "traceList": [str(block_trace_path.absolute())]
         }
