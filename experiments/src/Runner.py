@@ -226,7 +226,8 @@ class Runner:
         drop_index = df[(df['t2_size']==0) & \
                             ((df['max_t2_write_rate']>0) | \
                             (df['admission_probability'] > 0) | \
-                            (df['reject_first_entry_split_count']>0))].index
+                            (df['reject_first_entry_split_count']>0) | \
+                            (df['clean_regions']==0))].index
         df.drop(drop_index, inplace=True)
 
         return df 
