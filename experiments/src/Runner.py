@@ -108,6 +108,10 @@ class Runner:
     def get_block_trace_path(self, workload):
         return self.runner_dir.joinpath("{}.csv".format(workload))
 
+    
+    def get_sample_block_trace_path(self, workload, sample_rate, itr):
+        return self.runner_dir.joinpath("{}_{}_{}.csv".format(workload, sample_rate, itr))
+
 
     def download_s3_obj(self, key, output_path):
         try:
@@ -153,6 +157,21 @@ class Runner:
             # TODO: check if the size of the block trace file matches the size of the key in S3 
             pass 
         return block_trace_path 
+
+
+    def download_sample_block_trace(self, sample_block_trace_path):
+        sample_file_name = sample_block_trace_path.stem 
+        split_sample_file_name = sample_file_name.split("_")
+        workload, sample_rate, itr = split_sample_file_name[0], split_sample_file_name[1], split_sample_file_name[2]
+
+        if not sample_block_trace_path.is_file():
+            print("Block trace file does not exist {} downloading ..".format(sample_block_trace_path))
+            self.download_s3_obj("sample_block_trace/{}/{}_{}".format(workload, sample_rate, itr), str(sample_block_trace_path))
+            print("Block trace downlaoded!")
+        else:
+            # TODO: check if the size of the block trace file matches the size of the key in S3 
+            pass 
+        return sample_block_trace_path 
 
 
     def get_base_experiment_df(self):
@@ -227,7 +246,7 @@ class Runner:
                             ((df['max_t2_write_rate']>0) | \
                             (df['admission_probability'] > 0) | \
                             (df['reject_first_entry_split_count']>0) | \
-                            (df['clean_regions']==0))].index
+                            (df['clean_regions']>1))].index
         df.drop(drop_index, inplace=True)
 
         return df 
@@ -325,6 +344,51 @@ class Runner:
         return config, key_dict
 
 
+    def run_experiment_set(self, s3_key_prefix, experiment_row):
+        for it in range(self.iteration_count):
+            config_json, key_dict = self.get_config(s3_key_prefix, experiment_row, it)
+            if (experiment_row ["t1_size"]/1e3) > self.t1_size_limit_gb or \
+                    (experiment_row["t2_size"]/1e3) > self.t2_size_limit_gb:
+                return 1 
+            else:
+                status = self.run_main(config_json, s3_key_prefix, key_dict)
+                if status == -1:
+                    print("An experiment failed. Check the runner output directory.")
+                    return -1 
+        return 0 
+
+
+    def run_sample_experiment_set(self, s3_key_prefix, experiment_row):
+        # adjust t1 size, t2 size, queue size
+        sample_t1_size = int(experiment_row['t1_size'] * experiment_row['sample_ratio'])
+        sample_t2_size = int(experiment_row['t2_size'] * experiment_row['sample_ratio'])
+        sample_queue_size = int(experiment_row['queue_size'] * experiment_row['sample_ratio'])
+
+        if sample_t1_size < 100 or sample_t2_size < 150 or sample_queue_size < 1:
+            return 1
+
+        for it in range(self.iteration_count):
+            config_json, key_dict = self.get_config(s3_key_prefix, experiment_row, it)
+
+            config_json["cache_config"]["cacheSizeMB"] = sample_t1_size
+            config_json["cache_config"]["nvmCacheSizeMB"] = sample_t2_size
+            config_json["test_config"]["inputQueueSize"] = sample_queue_size
+            config_json["test_config"]["replayGeneratorConfig"] = {
+                "traceList": [str(self.get_sample_block_trace_path(experiment_row['workload'], int(experiment_row['sample_ratio']*100), it).absolute())]
+            }
+
+            if (sample_t1_size/1e3) > self.t1_size_limit_gb or \
+                    (sample_t2_size/1e3) > self.t2_size_limit_gb:
+                return 1 
+            else:
+                status = self.run_main(config_json, s3_key_prefix, key_dict, sample=True)
+                if status == -1:
+                    print("An experiment failed. Check the runner output directory.")
+                    return -1 
+        
+        return 0 
+
+
     def run_base_experiments(self):
         """ Run the base experiments from the configuration file 
         """
@@ -332,18 +396,13 @@ class Runner:
         experiment_df = self.get_base_experiment_df()
         s3_key_prefix = self.config["s3_prefix"]
         for experiment_index, experiment_row in experiment_df.iterrows():
-            for it in range(self.iteration_count):
-                # setup the configuration file 
-                config_json, key_dict = self.get_config(s3_key_prefix, experiment_row, it)
+            if experiment_row['sample_ratio'] == 0:
+                if (self.run_experiment_set(s3_key_prefix, experiment_row) == -1):
+                    return 
+            else:
+                if (self.run_sample_experiment_set("sample_{}".format(s3_key_prefix), experiment_row) == -1):
+                    return 
 
-                if (experiment_row ["t1_size"]/1e3) > self.t1_size_limit_gb or \
-                        (experiment_row["t2_size"]/1e3) > self.t2_size_limit_gb:
-                    status = -1 
-                else:
-                    status = self.run_main(config_json, s3_key_prefix, key_dict)
-                    if status == -1:
-                        print("An experiment failed. Check the runner output directory.")
-                        return 
 
 
     def check_experiment_status(self, key_dict):
@@ -392,9 +451,9 @@ class Runner:
 
         output_str = ",".join([str(_) for _ in value_list])
         usage_handle.write("{}\n".format(output_str))
+
         
-        
-    def run_main(self, cachebench_config, s3_prefix, key_dict):
+    def run_main(self, cachebench_config, s3_prefix, key_dict, sample=False):
         """ The main function that runs CacheBench using subprocess and tracks its progress.
 
         Parameters
@@ -425,7 +484,10 @@ class Runner:
         # machines also running the same experiment and download the block
         if self.s3 is not None:
             self.upload_s3_obj(key_dict['live'], str(self.cachebench_config_file_path))
-            self.download_block_trace(pathlib.Path(cachebench_config["test_config"]["replayGeneratorConfig"]["traceList"][0]))
+            if sample:
+                self.download_sample_block_trace(pathlib.Path(cachebench_config["test_config"]["replayGeneratorConfig"]["traceList"][0]))
+            else:
+                self.download_block_trace(pathlib.Path(cachebench_config["test_config"]["replayGeneratorConfig"]["traceList"][0]))
 
         # run the experiment and track its memory, CPU usage
         # fail smoothly if block replay failed 

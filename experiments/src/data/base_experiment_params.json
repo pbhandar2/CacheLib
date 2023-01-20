@@ -29,7 +29,7 @@
         "reject_first_entry_split_count": [0, 10, 20, 50, 100, 1000],
         "replay_rate": [1, 10, 100],
         "queue_size": [128, 256, 512],
-        "sample_ratio": [0],
+        "sample_ratio": [0.1, 0.25, 0.5, 0.75],
         "thread_count": [16],
         "tier_sizes": {
             "w98": [[500,0], [500,1000], [500,1500], [500,2000],
