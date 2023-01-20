@@ -362,7 +362,6 @@ class Runner:
         # adjust t1 size, t2 size, queue size
         sample_t1_size = int(experiment_row['t1_size'] * experiment_row['sample_ratio'])
         sample_t2_size = int(experiment_row['t2_size'] * experiment_row['sample_ratio'])
-        sample_queue_size = int(experiment_row['queue_size'] * experiment_row['sample_ratio'])
 
         if sample_t1_size < 100 or sample_t2_size < 150 or sample_queue_size < 1:
             return 1
@@ -372,7 +371,7 @@ class Runner:
 
             config_json["cache_config"]["cacheSizeMB"] = sample_t1_size
             config_json["cache_config"]["nvmCacheSizeMB"] = sample_t2_size
-            config_json["test_config"]["inputQueueSize"] = sample_queue_size
+            
             config_json["test_config"]["replayGeneratorConfig"] = {
                 "traceList": [str(self.get_sample_block_trace_path(experiment_row['workload'], int(experiment_row['sample_ratio']*100), it).absolute())]
             }
