@@ -363,7 +363,7 @@ class Runner:
         sample_t1_size = int(experiment_row['t1_size'] * experiment_row['sample_ratio'])
         sample_t2_size = int(experiment_row['t2_size'] * experiment_row['sample_ratio'])
 
-        if sample_t1_size < 100 or sample_t2_size < 150 or sample_queue_size < 1:
+        if sample_t1_size < 100 or sample_t2_size < 150:
             return 1
 
         for it in range(self.iteration_count):
