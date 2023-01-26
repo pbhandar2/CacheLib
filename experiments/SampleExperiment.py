@@ -89,13 +89,10 @@ class SampleExperiment:
 
 
     def tier_size_eligible(self, t1_size, t2_size):
-        sample_t1_size = int(self.sample_rate * t1_size/100)
-        sample_t2_size = int(self.sample_rate * t2_size/100)
-
-        return not (sample_t1_size < 100 or \
-                        sample_t2_size < 150 or \
-                        sample_t1_size > (self.machine_details["max_t1_size"]*1e3) or \
-                        sample_t2_size > (self.machine_details["max_t2_size"]*1e3))
+        return not (t1_size < 100 or \
+                        t2_size < 150 or \
+                        t1_size > (self.machine_details["max_t1_size"]*1e3) or \
+                        t2_size > (self.machine_details["max_t2_size"]*1e3))
     
 
     def run_sample_for_default_key(self, key):
@@ -121,6 +118,8 @@ class SampleExperiment:
         replay_rate = int(split_file_name[2])
         t1_size = int(split_file_name[3])
         t2_size = int(split_file_name[4])
+        sample_t1_size = int(self.sample_rate * t1_size/100)
+        sample_t2_size = int(self.sample_rate * t2_size/100)
         it = int(split_file_name[5])
 
         s3_key_suffix = "{}_{}_{}_{}_{}_{}_{}_{}_{}".format(queue_size, 
@@ -148,11 +147,11 @@ class SampleExperiment:
             return key_dict, -1
 
         # only run eligible tier sizes based on the machine
-        if not self.tier_size_eligible(t1_size, t2_size):
+        if not self.tier_size_eligible(sample_t1_size, sample_t2_size):
             return key_dict, -1
         
         # generate config
-        config = self.generate_config(queue_size, thread_count, replay_rate, t1_size, t2_size, it)
+        config = self.generate_config(queue_size, thread_count, replay_rate, sample_t1_size, sample_t2_size, it)
         with open(self.machine_details["cachebench_config_path"], "w+") as f:
             f.write(json.dumps(config, indent=4))
         
