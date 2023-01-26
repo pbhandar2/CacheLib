@@ -1,14 +1,21 @@
 """ This class manages the data in bucket 'mtcachedata' """
 
+import pathlib 
+import json 
 import boto3
 from botocore.exceptions import ClientError
 
 class S3Client:
-    def __init__(self, key, secret):
+    def __init__(self, s3_config_file="s3_config.json"):
         self.bucket_name = "mtcachedata"
+
+        # load the config file 
+        with pathlib.Path(s3_config_file).open('r') as f:
+            self.s3_config = json.load(f)
+        
         self.s3 = boto3.client('s3',
-                                aws_access_key_id=key, 
-                                aws_secret_access_key=secret)
+                                aws_access_key_id=self.s3_config["key"], 
+                                aws_secret_access_key=self.s3_config["secret"])
 
 
     def download_s3_obj(self, key, local_path):

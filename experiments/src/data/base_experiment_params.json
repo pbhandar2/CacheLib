@@ -6,19 +6,31 @@
             "max_t2_size": 470,
             "disk_file_size": 1500,
             "disk_file_path": "/users/pbhandar/disk/disk.file",
-            "nvm_file_path": "/users/pbhandar/nvm/nvm.file"
+            "nvm_file_path": "/users/pbhandar/nvm/nvm.file",
+            "block_trace_path": "/dev/shm/block_trace.csv",
+            "cachebench_config_path": "/dev/shm/cachebench_config.json",
+            "exp_output_path": "/dev/shm/exp_output",
+            "usage_output_path": "/dev/shm/exp_usage"
         },
         "c220g5": {
             "max_t1_size": 185,
             "max_t2_size": 470,
             "disk_file_path": "/users/pbhandar/disk/disk.file",
-            "nvm_file_path": "/users/pbhandar/nvm/nvm.file"
+            "nvm_file_path": "/users/pbhandar/nvm/nvm.file",
+            "block_trace_path": "/dev/shm/block_trace.csv",
+            "cachebench_config_path": "/dev/shm/cachebench_config.json",
+            "exp_output_path": "/dev/shm/exp_output",
+            "usage_output_path": "/dev/shm/exp_usage"
         },
         "r6525": {
             "max_t1_size": 250,
             "max_t2_size": 1500,
             "disk_file_path": "/users/pbhandar/disk/disk.file",
-            "nvm_file_path": "/users/pbhandar/nvm/nvm.file"
+            "nvm_file_path": "/users/pbhandar/nvm/nvm.file",
+            "block_trace_path": "/dev/shm/block_trace.csv",
+            "cachebench_config_path": "/dev/shm/cachebench_config.json",
+            "exp_output_path": "/dev/shm/exp_output",
+            "usage_output_path": "/dev/shm/exp_usage"
         }
     },
     "base_experiment": {
