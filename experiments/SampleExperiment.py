@@ -96,7 +96,6 @@ class SampleExperiment:
                         sample_t2_size < 150 or \
                         sample_t1_size > (self.machine_details["max_t1_size"]*1e3) or \
                         sample_t2_size > (self.machine_details["max_t2_size"]*1e3))
-            
     
 
     def run_sample_for_default_key(self, key):
@@ -114,11 +113,6 @@ class SampleExperiment:
         split_key = key.split("/")
         machine_class = split_key[3]
         workload = split_key[4]
-
-        # only run sampling for selected workloads and for experiments that 
-        # belong to this machine class 
-        if workload not in self.workload_list or machine_class != self.machine_class:
-            return -1 
         
         # get experiment parameters 
         split_file_name = split_key[-1].split("_")
@@ -128,10 +122,6 @@ class SampleExperiment:
         t1_size = int(split_file_name[3])
         t2_size = int(split_file_name[4])
         it = int(split_file_name[5])
-
-        # only run eligible tier sizes based on the machine
-        if not self.tier_size_eligible(t1_size, t2_size):
-            return -1 
 
         s3_key_suffix = "{}_{}_{}_{}_{}_{}_{}_{}_{}".format(queue_size, 
                                                             thread_count,
@@ -147,10 +137,19 @@ class SampleExperiment:
         for key_type in ["live", "done", "error", "usage"]:
             s3_key_prefix = "{}/{}/{}/{}".format(sample_key_prefix, key_type, machine_class, workload)
             key_dict[key_type] = "{}/{}".format(s3_key_prefix, s3_key_suffix)
-        
+
+        # only run sampling for selected workloads and for experiments that 
+        # belong to this machine class 
+        if workload not in self.workload_list or machine_class != self.machine_class:
+            return key_dict, -1
+
         # check if the new key already exists 
         if self.check_experiment_status(key_dict):
-            return -1
+            return key_dict, -1
+
+        # only run eligible tier sizes based on the machine
+        if not self.tier_size_eligible(t1_size, t2_size):
+            return key_dict, -1
         
         # generate config
         config = self.generate_config(queue_size, thread_count, replay_rate, t1_size, t2_size, it)
