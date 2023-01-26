@@ -183,7 +183,7 @@ class SampleExperiment:
                 self.s3.upload_s3_obj(key_dict['error'], str(self.machine_details["exp_output_path"]))
                 self.s3.delete_s3_obj(key_dict['live'])
                 print("Error running s3 key: {}".format(s3_key))
-                break 
+                return 
             elif return_code == 0:
                 self.s3.upload_s3_obj(key_dict['done'], str(self.machine_details["exp_output_path"]))
                 self.s3.upload_s3_obj(key_dict['usage'], str(self.machine_details["usage_output_path"]))
