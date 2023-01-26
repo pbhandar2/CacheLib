@@ -168,7 +168,8 @@ class SampleExperiment:
         print("running")
         print(config)
         runner = Runner(self.machine_details["exp_output_path"], self.machine_details["usage_output_path"])
-        return key_dict, runner.run(self.machine_details["cachebench_config_path"])
+        return_code = runner.run(self.machine_details["cachebench_config_path"])
+        return key_dict, return_code
 
 
     def run(self):
