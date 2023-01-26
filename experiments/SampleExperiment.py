@@ -168,7 +168,7 @@ class SampleExperiment:
         print("running")
         print(config)
         runner = Runner(self.machine_details["exp_output_path"], self.machine_details["usage_output_path"])
-        return runner.run(self.machine_details["cachebench_config_path"])
+        return key_dict, runner.run(self.machine_details["cachebench_config_path"])
 
 
     def run(self):
@@ -179,7 +179,7 @@ class SampleExperiment:
         s3_content = self.s3.get_all_s3_content(default_experiment_key_prefix)
         for s3_obj in s3_content:
             s3_key = s3_obj["Key"]
-            return_code = self.run_sample_for_default_key(s3_key)
+            key_dict, return_code = self.run_sample_for_default_key(s3_key)
             if return_code > 0:
                 self.s3.upload_s3_obj(key_dict['error'], str(self.machine_details["exp_output_path"]))
                 self.s3.delete_s3_obj(key_dict['live'])
