@@ -104,7 +104,7 @@ class SampleExperiment:
             key : str 
                 key of the default experiment for which we run a sampling experiments 
         """
-        sample_key_prefix = "experiment_output_dump/sample_default"
+        sample_key_prefix = "experiment_output_dump/default_sample"
 
         # get the machine and workload where it was run 
         split_key = key.split("/")
