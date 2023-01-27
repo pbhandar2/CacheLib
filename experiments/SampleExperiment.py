@@ -194,7 +194,7 @@ class SampleExperiment:
                 self.s3.delete_s3_obj(key_dict['live'])
                 print("Sucessfully ran s3 key: {}".format(s3_key))
             else:
-                # print("Couldn't run sampling for S3 key: {}".format(s3_key))
+                print("Couldn't run sampling for S3 key: {}".format(s3_key))
                 pass 
 
 
