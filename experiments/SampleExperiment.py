@@ -11,11 +11,11 @@ from S3Client import S3Client
 
 
 class SampleExperiment:
-    def __init__(self, machine_class, sample_rate, random_seed, bit_mask):
+    def __init__(self, machine_class, sample_rate, random_seed, num_bit_shift):
         self.machine_class = machine_class
         self.sample_rate = sample_rate
         self.random_seed = random_seed
-        self.bit_mask = bit_mask
+        self.num_bit_shift = num_bit_shift
 
         self.workload_list = ['w97', 'w82', 'w11', 'w47', 'w81', 'w68']
         with open("./src/data/base_experiment_params.json") as f:
@@ -129,7 +129,7 @@ class SampleExperiment:
                                                             t2_size, 
                                                             self.sample_rate,
                                                             self.random_seed,
-                                                            self.bit_mask,
+                                                            self.num_bit_shift,
                                                             it)
 
         key_dict = {}
@@ -154,12 +154,16 @@ class SampleExperiment:
         config = self.generate_config(queue_size, thread_count, replay_rate, sample_t1_size, sample_t2_size, it)
         with open(self.machine_details["cachebench_config_path"], "w+") as f:
             f.write(json.dumps(config, indent=4))
-        
-        # lock the experiment 
-        self.s3.upload_s3_obj(key_dict['live'], self.machine_details["cachebench_config_path"])
 
         # download the block trace 
-        block_trace_key = "sample_block_trace/{}/{}_{}_{}.csv".format(workload, self.random_seed, self.sample_rate, self.bit_mask)
+        block_trace_key = "sample_block_trace/{}/{}_{}_{}.csv".format(workload, self.random_seed, self.sample_rate, self.num_bit_shift)
+
+        if not self.s3.get_key_size(block_trace_key):
+            return key_dict, -1
+
+        # lock the experiment 
+        self.s3.upload_s3_obj(key_dict['live'], self.machine_details["cachebench_config_path"])
+        
         self.s3.download_s3_obj(block_trace_key, self.machine_details["block_trace_path"])
         print("block trace {} downloaded to {}".format(block_trace_key, self.machine_details["block_trace_path"]))
 
@@ -198,17 +202,17 @@ if __name__ == "__main__":
     parser.add_argument("machineclass", help="The class of the machine")
     parser.add_argument("--samplerate",
                             type=int,
-                            default=10,
+                            default=1,
                             help="The sampling rate used to generate the sample trace")
     parser.add_argument("--randomseed",
                             type=int,
                             default=42,
                             help="The random seed used to generate the sample trace")
-    parser.add_argument("--bitmask",
+    parser.add_argument("--numbitshift",
                             type=int,
-                            default=4294901760,
-                            help="The bitmask used to sample LBA")
+                            default=1,
+                            help="The number of bits shifted from LBA")
     args = parser.parse_args()
 
-    sample_experiment = SampleExperiment(args.machineclass, args.samplerate, args.randomseed, args.bitmask)
+    sample_experiment = SampleExperiment(args.machineclass, args.samplerate, args.randomseed, args.numbitshift)
     sample_experiment.run()
