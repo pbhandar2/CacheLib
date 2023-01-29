@@ -89,10 +89,9 @@ class SampleExperiment:
 
 
     def tier_size_eligible(self, t1_size, t2_size):
-        return not (t1_size < 100 or \
-                        t2_size < 150 or \
-                        t1_size > (self.machine_details["max_t1_size"]*1e3) or \
-                        t2_size > (self.machine_details["max_t2_size"]*1e3))
+        return (t1_size>=100 and (t2_size==0 or t2_size>=150) and \
+                t1_size <= (self.machine_details["max_t1_size"]*1e3) and \
+                t2_size <= (self.machine_details["max_t2_size"]*1e3)))
     
 
     def run_sample_for_default_key(self, key):
