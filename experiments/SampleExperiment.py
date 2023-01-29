@@ -17,6 +17,9 @@ class SampleExperiment:
         self.random_seed = random_seed
         self.num_bit_shift = num_bit_shift
 
+        self.cachelib_min_t1_size_mb = 100 
+        self.cachelib_min_t2_size_mb = 150 
+
         self.workload_list = ['w97', 'w82', 'w11', 'w47', 'w81', 'w68']
         with open("./src/data/base_experiment_params.json") as f:
             self.exp_params = json.load(f)
@@ -40,7 +43,6 @@ class SampleExperiment:
             experiment_has_already_started_flag : bool
                 a flag denoting whether the experiment has already started or completed 
         """
-
         experiment_has_already_started_flag = False 
         for experiment_status in key_dict:
             cur_s3_key = key_dict[experiment_status]
@@ -89,7 +91,22 @@ class SampleExperiment:
 
 
     def tier_size_eligible(self, t1_size, t2_size):
-        return (t1_size>=100 and (t2_size==0 or t2_size>=150) and \
+        """ Checks if the tier sizes are eligible based on the limits
+            of CacheLib and the machine. 
+
+            Parameters
+            ----------
+            t1_size : int 
+                tier-1 size in MB 
+            t2_size : int 
+                tier-2 size in MB 
+
+            Return 
+            ------
+            eligibility : bool 
+                a boolean that represents whether the tier sizes can be run 
+        """
+        return (t1_size>=self.cachelib_min_t1_size_mb and (t2_size==0 or t2_size>=self.cachelib_min_t2_size_mb) and \
                 t1_size <= (self.machine_details["max_t1_size"]*1e3) and \
                 t2_size <= (self.machine_details["max_t2_size"]*1e3)))
     
