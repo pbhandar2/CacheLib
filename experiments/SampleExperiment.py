@@ -108,7 +108,7 @@ class SampleExperiment:
         """
         return (t1_size>=self.cachelib_min_t1_size_mb and (t2_size==0 or t2_size>=self.cachelib_min_t2_size_mb) and \
                 t1_size <= (self.machine_details["max_t1_size"]*1e3) and \
-                t2_size <= (self.machine_details["max_t2_size"]*1e3)))
+                t2_size <= (self.machine_details["max_t2_size"]*1e3))
     
 
     def run_sample_for_default_key(self, key):
