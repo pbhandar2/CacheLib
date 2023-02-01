@@ -11,7 +11,8 @@ from S3Client import S3Client
 
 
 class SampleExperiment:
-    def __init__(self, machine_class, sample_rate, random_seed, num_bit_shift):
+    def __init__(self, name, machine_class, sample_rate, random_seed, num_bit_shift):
+        self.name = name 
         self.machine_class = machine_class
         self.sample_rate = sample_rate
         self.random_seed = random_seed
@@ -20,7 +21,7 @@ class SampleExperiment:
         self.cachelib_min_t1_size_mb = 100 
         self.cachelib_min_t2_size_mb = 150 
 
-        self.workload_list = ['w97', 'w82', 'w11', 'w47', 'w81', 'w68']
+        self.workload_list = ['w97', 'w82', 'w11', 'w81']
         with open("./src/data/base_experiment_params.json") as f:
             self.exp_params = json.load(f)
             self.machine_details = self.exp_params["machine"][machine_class]
@@ -120,7 +121,7 @@ class SampleExperiment:
             key : str 
                 key of the default experiment for which we run a sampling experiments 
         """
-        sample_key_prefix = "experiment_output_dump/default_sample"
+        sample_key_prefix = "experiment_output_dump/{}".format(self.name)
 
         # get the machine and workload where it was run 
         split_key = key.split("/")
@@ -134,8 +135,8 @@ class SampleExperiment:
         replay_rate = int(split_file_name[2])
         t1_size = int(split_file_name[3])
         t2_size = int(split_file_name[4])
-        sample_t1_size = int(self.sample_rate * t1_size/100)
-        sample_t2_size = int(self.sample_rate * t2_size/100)
+        sample_t1_size = int(self.sample_rate * t1_size)
+        sample_t2_size = int(self.sample_rate * t2_size)
         it = int(split_file_name[5])
 
         s3_key_suffix = "{}_{}_{}_{}_{}_{}_{}_{}_{}".format(queue_size, 
@@ -172,9 +173,10 @@ class SampleExperiment:
             f.write(json.dumps(config, indent=4))
 
         # download the block trace 
-        block_trace_key = "sample_block_trace/{}/{}_{}_{}.csv".format(workload, self.random_seed, self.sample_rate, self.num_bit_shift)
+        block_trace_key = "sample_block_trace/{}/{}/{}_{}_{}.csv".format(self.name, workload, self.random_seed, self.sample_rate, self.num_bit_shift)
 
         if not self.s3.get_key_size(block_trace_key):
+            print("Couldn't find block trace {}".format(block_trace_key))
             return key_dict, -1
 
         # lock the experiment 
@@ -198,21 +200,25 @@ class SampleExperiment:
         s3_content = self.s3.get_all_s3_content(default_experiment_key_prefix)
         for s3_obj in s3_content:
             s3_key = s3_obj["Key"]
+            workload_check = False
+            for workload in self.workload_list:
+                if workload in s3_key:
+                    workload_check = True 
+                    break 
+            
+            if not workload_check:
+                continue 
+            
             key_dict, return_code = self.run_sample_for_default_key(s3_key)
             if return_code > 0:
                 self.s3.upload_s3_obj(key_dict['error'], str(self.machine_details["exp_output_path"]))
                 self.s3.delete_s3_obj(key_dict['live'])
-                print("Error running s3 key: {}".format(s3_key))
                 return 
             elif return_code == 0:
                 self.s3.upload_s3_obj(key_dict['done'], str(self.machine_details["exp_output_path"]))
                 self.s3.upload_s3_obj(key_dict['usage'], str(self.machine_details["usage_output_path"]))
                 self.s3.delete_s3_obj(key_dict['live'])
-                print("Sucessfully ran s3 key: {}".format(s3_key))
-            else:
-                if self.machine_class in s3_key:
-                    print("Couldn't run sampling for S3 key: {}".format(s3_key))
-                pass 
+                print("Sucessfully ran s3 key: {},{}".format(s3_key, key_dict['done']))
 
 
 if __name__ == "__main__":
@@ -220,7 +226,7 @@ if __name__ == "__main__":
     parser.add_argument("machineclass", help="The class of the machine")
     parser.add_argument("--samplerate",
                             type=int,
-                            default=1,
+                            default=0.01,
                             help="The sampling rate used to generate the sample trace")
     parser.add_argument("--randomseed",
                             type=int,
@@ -228,9 +234,12 @@ if __name__ == "__main__":
                             help="The random seed used to generate the sample trace")
     parser.add_argument("--numbitshift",
                             type=int,
-                            default=1,
+                            default=8,
                             help="The number of bits shifted from LBA")
+    parser.add_argument("--samplename",
+                            default="sample_basic",
+                            help="Name of the experiment")
     args = parser.parse_args()
 
-    sample_experiment = SampleExperiment(args.machineclass, args.samplerate, args.randomseed, args.numbitshift)
+    sample_experiment = SampleExperiment(args.samplename, args.machineclass, args.samplerate, args.randomseed, args.numbitshift)
     sample_experiment.run()
