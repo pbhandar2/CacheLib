@@ -225,7 +225,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Replay sampled block trace")
     parser.add_argument("machineclass", help="The class of the machine")
     parser.add_argument("--samplerate",
-                            type=int,
+                            type=float,
                             default=0.01,
                             help="The sampling rate used to generate the sample trace")
     parser.add_argument("--randomseed",
