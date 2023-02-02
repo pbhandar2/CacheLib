@@ -84,7 +84,7 @@ class RunSampleSet(Experiment):
                 self.s3.upload_s3_obj(key_dict['done'], str(self.machine_details["exp_output_path"]))
                 self.s3.upload_s3_obj(key_dict['usage'], str(self.machine_details["usage_output_path"]))
                 self.s3.delete_s3_obj(key_dict['live'])
-                print("Sucessfully ran s3 key: {},{}".format(s3_key, key_dict['done']))
+                print("Sucessfully ran s3 key: {}".format(key_dict['done']))
     
 
     def run_default(self, experiment_row):
