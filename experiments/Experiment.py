@@ -7,10 +7,8 @@ from S3Client import S3Client
 
 
 class Experiment(ABC):
-    def __init__(self, name, machine):
-        self.name = name 
+    def __init__(self, machine):
         self.machine = machine 
-        self.key_prefix = "experiment_output_dump/{}".format(self.name)
         self.s3 = S3Client()
         self.tag = socket.gethostname()
         with open("./src/data/base_experiment_params.json") as f:
@@ -22,27 +20,28 @@ class Experiment(ABC):
 
 
     def check_experiment_status(self, key_dict):
-        """ Make sure the experiment isn't already running or 
-            already completed. 
+        """ Check if an experiment has already started running in some
+            machine or if it is already done. 
 
             Parameters
             ----------
             key_dict : dict 
-                dict containing the keys to check if an experiment is running/done 
+                dict containing the live and done key to check 
             
             Return 
             ------
-            experiment_status : bool
+            experiment_has_already_started_flag : bool
                 a flag denoting whether the experiment has already started or completed 
         """
-        experiment_status = False 
+        experiment_has_already_started_flag = False 
         for experiment_status in key_dict:
             cur_s3_key = key_dict[experiment_status]
             s3_object_size = self.s3.get_key_size(cur_s3_key)
             if s3_object_size > 0:
-                experiment_status = True 
+                experiment_has_already_started_flag = True 
                 break 
-        return experiment_status
+        return experiment_has_already_started_flag
+
 
     def get_base_config(self, queue_size, thread_count, replay_rate, t1_size, t2_size):
         """ Get the dict of basic experiment configuration that we need for all experiments. 
@@ -131,7 +130,7 @@ class Experiment(ABC):
                 t1_size <= (self.machine_details["max_t1_size"]*1e3) and \
                 t2_size <= (self.machine_details["max_t2_size"]*1e3))
     
-    def get_key_dict(self, s3_key_suffix):
+    def get_key_dict(self, s3_key_prefix, s3_key_suffix):
         """ Get the dict of keys related to the experiments denoted by the 
             S3 suffix. 
 
@@ -147,8 +146,8 @@ class Experiment(ABC):
         """
         key_dict = {}
         for key_type in ["live", "done", "error", "usage"]:
-            s3_key_prefix = "{}/{}/{}".format(self.key_prefix, key_type, self.machine)
-            key_dict[key_type] = "{}/{}".format(s3_key_prefix, s3_key_suffix)
+            key_dict[key_type]  = "{}/{}/{}/{}".format(s3_key_prefix, key_type, self.machine, s3_key_suffix)
+            
         return key_dict
     
     def download_storage_trace(self, block_trace_key):
