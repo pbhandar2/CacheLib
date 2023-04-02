@@ -1,5 +1,5 @@
-sudo apt-get update 
-sudo apt install libaio-dev 
+#! /usr/bin/env bash
+
 cd ${HOME}
 if [ ! -d "${HOME}/CacheLib" ]; then
     git clone https://github.com/pbhandar2/CacheLib

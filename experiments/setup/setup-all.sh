@@ -1,8 +1,10 @@
 #! /usr/bin/env bash
 
 # {{{ Bash settings
-# abort on nonzero exitstatus
-set -o errexit
+
+# disabled abort on exit status because cachelib installation might fail 
+# set -o errexit
+
 # abort on unbound variable
 set -o nounset
 # don't hide errors within pipes
@@ -19,11 +21,12 @@ aws_access_key=${5}
 aws_secret=${6}
 home_dir="${7:-$HOMEDIR}"
 
+./setup-package.sh 
+
 ./setup-mount.sh ${backing_dev_path} ${nvm_dev_path} ${backing_file_size_gb} ${nvm_file_size_gb} ${home_dir}
-
-
 
 ./setup-aws.sh ${aws_access_key} ${aws_secret}
 
 ./setup-cachelib.sh 
 
+./setup-custom.sh
