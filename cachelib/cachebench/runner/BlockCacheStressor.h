@@ -864,53 +864,118 @@ class BlockCacheStressor : public BlockCacheStressorBase {
 	// @param stats       Throughput stats
     // @param fileIndex   The index used to map to resources of the file being replayed 
 	void stressByBlockReplay(BlockReplayStats& stats, uint64_t fileIndex) {
-		std::mt19937_64 gen(folly::Random::rand64());
-		std::optional<uint64_t> lastRequestId = std::nullopt;            
         try {
+            // get the block request 
+            std::mt19937_64 gen(folly::Random::rand64());
+            std::optional<uint64_t> lastRequestId = std::nullopt; 
             const Request& req(getReq(fileIndex, gen, lastRequestId)); 
-            std::chrono::time_point<std::chrono::system_clock> lastSubmitTime = std::chrono::system_clock::now();
-            std::chrono::time_point<std::chrono::system_clock> curTime; 
-            std::chrono::time_point<std::chrono::system_clock> reqStartTimePoint;
-            std::chrono::time_point<std::chrono::system_clock> postIATWaitTimePoint;
-            std::chrono::time_point<std::chrono::system_clock> loadCompleteTimePoint;
 
-            uint64_t ts = req.getTs();
-            double iat;
-            traceStartTime_ = ts;
-            tracePrevTime_ = ts;
+            traceStartTimestampUs_ = req.getTs();
+            tracePrevTimeStampUs_ = req.getTs();
+
+            uint64_t traceCurrentTimestampUs;
+            uint64_t tracePrevTimestampUs;
+
+            uint64_t traceTimeElapsedUs;
+            uint64_t replayTimeElapsedNs;
+
+            uint64_t traceInterArrivalTimeUs;
+            int64_t sleepTimeNs;
+            double percentTimingError;
+
+            std::chrono::time_point<std::chrono::system_clock> iatTrackingStartTimepoint;
+            std::chrono::time_point<std::chrono::system_clock> loadCompleteTimepoint;
+
             do {
-                reqStartTimePoint = std::chrono::system_clock::now();
-                ts = req.getTs();
-                iat = static_cast<double>((ts - tracePrevTime_))/config_.scaleIAT;
-                while (pendingBlockRequestCount_>0) {
-                    curTime = std::chrono::system_clock::now();
-                    if (config_.relativeTiming) {
-                        auto timeSinceLastSubmit = std::chrono::duration_cast<std::chrono::microseconds>(curTime - lastSubmitTime).count();
-                        if (timeSinceLastSubmit >= iat)
-                            break;
-                    } else {                            
-                        auto timeSinceStart = std::chrono::duration_cast<std::chrono::microseconds>(curTime - startTime_).count();
-                        if (timeSinceStart >= (ts-traceStartTime_))
-                            break;
+                traceCurrentTimestampUs = req.getTs();
+                traceTimeElapsedUs = traceCurrentTimestampUs - traceStartTimestampUs_;
+                traceInterArrivalTimeUs = traceCurrentTimestampUs - tracePrevTimestampUs;
+                blockRequestCount_++;
+
+                if (blockRequestCount_ > 1) {
+                    // no need to wait to issue the first request so we only run this code once blockRequestCount_ > 1 
+                    if (config_.blockReplayConfig.globalClock) {
+                        // use a global clock and try to sync replay time elapsed and trace time elapsed at all times 
+                        sleepTimeNs = (traceTimeElapsedUs*1000) - getTestDurationNs();
+                        if (sleepTimeNs >= 0) 
+                            std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
+                        
+                        replayTimeElapsedNs = getTestDurationNs();
+                        percentTimingError = 100*(replayTimeElapsedNs-(traceTimeElapsedUs*1000))/replayTimeElapsedNs;
+                        timingErrorPercentiles_->trackValue(percentTimingError);
+                    } else {
+                        // do not use a global clock, try to mimic the IAT of individual requests regardless of the difference between replay and trace time elapsed 
+                        std::chrono::time_point<std::chrono::system_clock> currentTimepoint = std::chrono::system_clock::now();
+                        uint64_t replayIatUs = std::chrono::duration_cast<std::chrono::microseconds>(currentTimepoint - iatTrackingStartTimepoint).count();
+                        while (replayIatUs < traceInterArrivalTimeUs) {
+                            currentTimepoint = std::chrono::system_clock::now();
+                            replayIatUs = std::chrono::duration_cast<std::chrono::microseconds>(currentTimepoint - iatTrackingStartTimepoint).count();
+                        }
+
+                        percentTimingError = 100*(replayIatUs - traceInterArrivalTimeUs)/replayIatUs;
+                        timingErrorPercentiles_->trackValue(percentTimingError);
                     }
                 }
-                postIATWaitTimePoint = std::chrono::system_clock::now();
-                auto iatWaitDuration = std::chrono::duration_cast<std::chrono::microseconds>(postIATWaitTimePoint-reqStartTimePoint).count();
-                iatWaitDurationPercentile_->trackValue(iatWaitDuration);
-                
-                uint64_t index = loadBlockRequest(req, stats);
-                while (index == config_.inputQueueSize) {
-                    index = loadBlockRequest(req, stats);
-                }
 
-                loadCompleteTimePoint = std::chrono::system_clock::now();
-                auto loadDuration = std::chrono::duration_cast<std::chrono::microseconds>(loadCompleteTimePoint-postIATWaitTimePoint).count();
-                loadDurationPercentile_->trackValue(loadDuration);
+                // submit request to the block storage system and track how long it took for the block request to be loaded
+                iatTrackingStartTimepoint = std::chrono::system_clock::now();
+                uint64_t index = loadBlockRequest(req, stats);
+                while (index == config_.inputQueueSize) 
+                    index = loadBlockRequest(req, stats);
+                loadCompleteTimepoint = std::chrono::system_clock::now();
+                uint64_t loadTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(loadCompleteTimepoint - iatTrackingStartTimepoint).count();
+                loadTimeUsPercentile_->trackValue(loadTimeUs);
+
                 
                 const Request& req(getReq(fileIndex, gen, lastRequestId)); 
-                lastSubmitTime = std::chrono::system_clock::now();
-                tracePrevTime_ = ts;
+                tracePrevTimestampUs = traceCurrentTimestampUs;
             } while (true);
+
+            
+
+            // std::chrono::time_point<std::chrono::system_clock> lastSubmitTime = std::chrono::system_clock::now();
+            // std::chrono::time_point<std::chrono::system_clock> curTime; 
+            // std::chrono::time_point<std::chrono::system_clock> reqStartTimePoint;
+            // std::chrono::time_point<std::chrono::system_clock> postIATWaitTimePoint;
+            // std::chrono::time_point<std::chrono::system_clock> loadCompleteTimePoint;
+
+            // uint64_t ts = req.getTs();
+            // double iat;
+            // traceStartTime_ = ts;
+            // tracePrevTime_ = ts;
+            // do {
+            //     reqStartTimePoint = std::chrono::system_clock::now();
+            //     ts = req.getTs();
+            //     iat = static_cast<double>((ts - tracePrevTime_))/config_.scaleIAT;
+            //     while (pendingBlockRequestCount_>0) {
+            //         curTime = std::chrono::system_clock::now();
+            //         if (config_.relativeTiming) {
+            //             auto timeSinceLastSubmit = std::chrono::duration_cast<std::chrono::microseconds>(curTime - lastSubmitTime).count();
+            //             if (timeSinceLastSubmit >= iat)
+            //                 break;
+            //         } else {                            
+            //             auto timeSinceStart = std::chrono::duration_cast<std::chrono::microseconds>(curTime - startTime_).count();
+            //             if (timeSinceStart >= (ts-traceStartTime_))
+            //                 break;
+            //         }
+            //     }
+            //     postIATWaitTimePoint = std::chrono::system_clock::now();
+            //     auto iatWaitDuration = std::chrono::duration_cast<std::chrono::microseconds>(postIATWaitTimePoint-reqStartTimePoint).count();
+            //     iatWaitDurationPercentile_->trackValue(iatWaitDuration);
+                
+            //     uint64_t index = loadBlockRequest(req, stats);
+            //     while (index == config_.inputQueueSize) {
+            //         index = loadBlockRequest(req, stats);
+            //     }
+
+            //     loadCompleteTimePoint = std::chrono::system_clock::now();
+            //     auto loadDuration = std::chrono::duration_cast<std::chrono::microseconds>(loadCompleteTimePoint-postIATWaitTimePoint).count();
+            //     loadDurationPercentile_->trackValue(loadDuration);
+                
+            //     const Request& req(getReq(fileIndex, gen, lastRequestId)); 
+            //     lastSubmitTime = std::chrono::system_clock::now();
+            //     tracePrevTime_ = ts;
+            // } while (true);
         } catch (const cachebench::EndOfTrace& ex) {
         }
         wg_->markFinish();
@@ -936,6 +1001,20 @@ class BlockCacheStressor : public BlockCacheStressorBase {
             }
             return val;
         }
+    
+    // ---------
+    uint64_t blockRequestCount_ = 0;
+    util::PercentileStats *timingErrorPercentiles_ = new util::PercentileStats();
+    util::PercentileStats *loadTimeUsPercentile_ = new util::PercentileStats();
+    // ---------
+
+
+
+    
+    util::PercentileStats *traceInterArrivalTimeUsPercentile_ = new util::PercentileStats();
+
+
+    uint64_t traceStartTimestampUs_;
 
 
     // parameters setup during stressor initiation 
@@ -952,7 +1031,7 @@ class BlockCacheStressor : public BlockCacheStressorBase {
     std::chrono::time_point<std::chrono::system_clock> startTime_;
     std::chrono::time_point<std::chrono::system_clock> endTime_;
     uint64_t traceStartTime_;
-    uint64_t tracePrevTime_;
+    uint64_t tracePrevTimeStampUs_;
 
     // tracking system statistics 
     uint64_t pendingBlockRequestCount_{0};

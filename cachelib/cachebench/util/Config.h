@@ -153,6 +153,47 @@ struct ReplayGeneratorConfig : public JSONConfig {
   SerializeMode getSerializationMode() const;
 };
 
+
+struct BlockReplayConfig : public JSONConfig {
+  BlockReplayConfig() {}
+
+  explicit BlockReplayConfig(const folly::dynamic& configJson);
+
+  // the number of traces and disk files should be equal 
+  std::vector<std::string> traces{};
+  std::vector<std::string> diskFiles{};
+
+  uint32_t lbaSizeBytes{512};
+  uint32_t blockSizeBytes{4096};
+
+  // maximum number of outstanding block requests at a time 
+  uint32_t queueSize{128};
+
+  // threads allocated to pop block requests from a queue and process them 
+  uint32_t blockRequestProcesserThreads{16};
+
+  // threads allocated to process async IO completion 
+  uint32_t asyncIOReturnTrackerThreads{16};
+
+  // the timestamps are divided by the replayRate to replay an accelerated workload 
+  uint32_t replayRate{1};
+
+  // whether to sync the replay time with timestamps on the trace 
+  // when TRUE:
+  //  if the replay time is ahead of trace time then requests might be submitted earlier 
+  //  to catch up 
+  // when FALSE:
+  //  the IAT of each block request is followed even if the replay time is ahead of trace time 
+  bool globalClock{true};
+
+  // only applicable when globalClock is false 
+  // if -1: if there are no outstanding block requests in the system ignore the inter-arrival time and submit the block request 
+  // if 0: follow trace timestamps 
+  // if N: where N>0 wait for min(N, inter-arrival time)
+  int32_t idleWaitTimeUs{0};
+};
+
+
 // The class defines the admission policy at stressor level. The stressor
 // checks the admission policy first before inserting an item into cache.
 //
@@ -175,6 +216,9 @@ struct StressorConfig : public JSONConfig {
 
   // Valid when generator is replay generator
   ReplayGeneratorConfig replayGeneratorConfig;
+
+  // Valid when doing block trace replay 
+  BlockReplayConfig blockReplayConfig; 
 
   // name identifying a custom type of the stress test. When empty, launches a
   // standard stress test using the workload config against an instance of the
@@ -266,7 +310,7 @@ struct StressorConfig : public JSONConfig {
   std::string diskFilePath{};
   bool relativeTiming{true};
   double scaleIAT{1.0};
-  uint64_t maxDiskFileOffset;
+  uint64_t maxDiskFileOffset{1024*1024*1024};
 
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);

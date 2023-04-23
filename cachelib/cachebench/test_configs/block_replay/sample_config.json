@@ -15,6 +15,7 @@
       "delayNs": 1000000,
       "statPrintDelaySec": 10,
       "relativeTiming": true, 
+      "maxDiskFileOffset": 1000000,
       "diskFilePath": "../../cachelib/cachebench/test_configs/block_replay/disk.file",
       "replayGeneratorConfig": {
           "traceList": ["../../cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
