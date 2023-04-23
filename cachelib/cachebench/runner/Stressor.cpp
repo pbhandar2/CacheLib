@@ -49,12 +49,16 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 
 BlockReplayStats& BlockReplayStats::operator+=(const BlockReplayStats& other) {
 
+  delayedBlockRequestCount += other.delayedBlockRequestCount;
+
   // workload stats   
   readReqCount += other.readReqCount;
   writeReqCount += other.writeReqCount;
 
   readReqBytes += other.readReqBytes;
   writeReqBytes += other.writeReqBytes;
+
+  
 
   // system stats 
   experimentRuntime = std::max(other.experimentRuntime, experimentRuntime);

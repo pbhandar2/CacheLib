@@ -20,6 +20,10 @@
       "replayGeneratorConfig": {
           "traceList": ["../../cachelib/cachebench/test_configs/block_replay/sample_trace.csv"],
           "skipHeader": false
+      },
+      "blockReplayConfig": {
+        "globalClock": false, 
+        "idleWaitTimeUs": 5000000
       }
   }
 }

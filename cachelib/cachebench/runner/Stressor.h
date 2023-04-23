@@ -58,6 +58,11 @@ struct ThroughputStats {
 
 struct BlockReplayStats {
 
+  // only relevant when using global clock 
+  // if the replay time elapsed at the time of reading the block request is already greater than 
+  // request arrival time elapsed 
+  uint64_t delayedBlockRequestCount{0};
+
 
   // workload stats 
   uint64_t readReqCount{0};
