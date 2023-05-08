@@ -18,6 +18,7 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
+#include "cachelib/cachebench/runner/BlockStorageSystemStressor.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
@@ -26,6 +27,8 @@
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
+#include "cachelib/cachebench/workload/BlockReplayGenerator.h"
+
 
 namespace facebook {
 namespace cachelib {
@@ -148,15 +151,21 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
     return std::make_unique<WorkloadGenerator>(config);
   } else if (config.generator == "online") {
     return std::make_unique<OnlineGenerator>(config);
-
+  } else if (config.generator == "block-replay") {
+    return std::make_unique<BlockReplayGenerator>(config);
   } else {
     throw std::invalid_argument("Invalid config");
   }
 }
 } // namespace
 
+
 std::unique_ptr<Stressor> Stressor::makeStressor(
     const CacheConfig& cacheConfig, const StressorConfig& stressorConfig) {
+    
+  // make the workload generator first 
+  auto generator = makeGenerator(stressorConfig);
+
   if (stressorConfig.name == "high_refcount") {
     return std::make_unique<HighRefcountStressor>(cacheConfig,
                                                   stressorConfig.numOps);
@@ -169,6 +178,8 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   } else if (stressorConfig.name == "fast_shutdown") {
     return std::make_unique<FastShutdownStressor>(cacheConfig,
                                                   stressorConfig.numOps);
+  } else if (stressorConfig.name == "block-storage") {
+    return std::make_unique<BlockStorageSystemStressor<LruAllocator>>(cacheConfig, stressorConfig, std::move(generator));
   } else if (stressorConfig.name == "async") {
     if (stressorConfig.generator != "workload" &&
         !stressorConfig.generator.empty()) {
@@ -179,7 +190,6 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
           stressorConfig.generator));
     }
 
-    auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
       return std::make_unique<AsyncCacheStressor<LruAllocator>>(

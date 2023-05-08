@@ -1,0 +1,12 @@
+{
+    "cache_config": {
+        "cacheSizeMB": 100,
+        "allocSizes": [4136]
+    },
+    "test_config": {
+        "name": "block-storage",
+        "populateItem": true,
+        "generator": "block-replay",
+        "numThreads": 1
+    }
+}
