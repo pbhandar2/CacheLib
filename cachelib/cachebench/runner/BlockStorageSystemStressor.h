@@ -106,6 +106,22 @@ class BlockStorageSystemStressor : public Stressor {
         // @param stats       Block replay stats 
         // @param fileIndex   The index used to map to resources of the file being replayed 
         void stressByBlockReplay(ThroughputStats& stats, uint64_t fileIndex) {
+            // parms for getReq in workload generator 
+            std::mt19937_64 gen(folly::Random::rand64());
+            std::optional<uint64_t> lastRequestId = std::nullopt;
+
+            std::cout << "WE ARE STRESSING BY BLOCK REPLAYY!\n";
+            
+            while (true) {
+                try {
+                    const Request& req(wg_->getReq(fileIndex, gen, lastRequestId));
+                    std::cout << "Got req\n";
+                } catch (const cachebench::EndOfTrace& ex) {
+                    std::cout << "Bad bad\n";
+                    break;
+                }
+            }
+
             wg_->markFinish();
         }
 
@@ -125,7 +141,7 @@ class BlockStorageSystemStressor : public Stressor {
 
         // vector of stats from each replay thread which can be collected 
         // separately and/or aggregated to generate global statistics 
-        // TODO: naming it block replay stats for now 
+        // TODO: implement a new stat class called BlockReplayStats
         std::vector<ThroughputStats> blockReplayStatVec_;
 };
 

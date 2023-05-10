@@ -24,6 +24,19 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
+  JSONSetVal(configJson, traces);
+  JSONSetVal(configJson, diskFiles);
+  JSONSetVal(configJson, lbaSizeByte);
+  JSONSetVal(configJson, blockSizeByte);
+  JSONSetVal(configJson, queueSize);
+  JSONSetVal(configJson, blockRequestProcesserThreads);
+  JSONSetVal(configJson, globalClock);
+  JSONSetVal(configJson, idleWaitTimeUs);
+  checkCorrectSize<BlockReplayConfig, 80>();
+}
+
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, generator);
 
@@ -80,6 +93,11 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
         ReplayGeneratorConfig{configJson["replayGeneratorConfig"]};
   }
 
+  if (configJson.count("blockReplayConfig")) {
+    blockReplayConfig =
+        BlockReplayConfig{configJson["blockReplayConfig"]};
+  }
+
   if (!traceFileName.empty() && !traceFileNames.empty()) {
     throw std::invalid_argument(
         folly::sformat("set only one of traceFileName or traceFileNames"));
@@ -88,7 +106,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 496>();
+  checkCorrectSize<StressorConfig, 576>();
 }
 
 bool StressorConfig::usesChainedItems() const {

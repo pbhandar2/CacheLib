@@ -64,6 +64,10 @@ struct JSONConfig {
     field = val.asInt();
   }
 
+  static void setValImpl(int32_t& field, const folly::dynamic& val) {
+    field = val.asInt();
+  }
+
   static void setValImpl(double& field, const folly::dynamic& val) {
     field = val.asDouble();
   }

@@ -1,0 +1,17 @@
+{
+    "cache_config": {
+        "cacheSizeMB": 100,
+        "allocSizes": [4136]
+    },
+    "test_config": {
+        "name": "block-storage",
+        "populateItem": true,
+        "generator": "block-replay",
+        "numThreads": 1,
+        "blockReplayConfig": {
+            "traces": ["/users/pbhandar/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv", 
+                        "/users/pbhandar/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_b.csv", 
+                        "/users/pbhandar/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_c.csv"]
+        }
+    }
+}
