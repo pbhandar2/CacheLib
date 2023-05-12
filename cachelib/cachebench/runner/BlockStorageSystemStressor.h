@@ -35,6 +35,7 @@ class BlockStorageSystemStressor : public Stressor {
             :   config_(std::move(config)),
                 wg_(std::move(generator)),
                 blockReplayStatVec_(config.numThreads),
+                stressorThreadTerminateFlag_(config.numThreads, false),
                 endTime_{std::chrono::system_clock::time_point::max()} {
 
             // setup the cache 
@@ -109,19 +110,19 @@ class BlockStorageSystemStressor : public Stressor {
             // parms for getReq in workload generator 
             std::mt19937_64 gen(folly::Random::rand64());
             std::optional<uint64_t> lastRequestId = std::nullopt;
-
-            std::cout << "WE ARE STRESSING BY BLOCK REPLAYY!\n";
-            
             while (true) {
                 try {
                     const Request& req(wg_->getReq(fileIndex, gen, lastRequestId));
-                    std::cout << "Got req\n";
+
+                    if (req.getOp() == OpType::kGet)
+                        std::cout << folly::sformat("{}: Read-> TS: {}, LBA: {}, SIZE: {}\n", fileIndex, req.timestamp, req.key, *(req.sizeBegin));
+                    else
+                        std::cout << folly::sformat("{}: Write-> TS: {}, LBA: {}, SIZE: {}\n", fileIndex, req.timestamp, req.key, *(req.sizeBegin));
+                    
                 } catch (const cachebench::EndOfTrace& ex) {
-                    std::cout << "Bad bad\n";
                     break;
                 }
             }
-
             wg_->markFinish();
         }
 
@@ -133,6 +134,7 @@ class BlockStorageSystemStressor : public Stressor {
 
         // NOTE: we have only tried this stressor with BlockReplayGenerator 
         std::unique_ptr<GeneratorBase> wg_; 
+        std::vector<bool>stressorThreadTerminateFlag_;
 
         // tracking time elapsed at any point in time during runtime 
         mutable std::mutex timeMutex_;

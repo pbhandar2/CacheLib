@@ -1,11 +1,9 @@
 #pragma once
 
-#include <iostream>
 #include <fstream>
 
 #include <folly/Format.h>
 #include <folly/Random.h>
-#include <folly/logging/xlog.h>
 
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Request.h"
@@ -16,53 +14,23 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-
-// This class reads a file of a given path 
-class FileReader {
-    public:
-        explicit FileReader(std::string path)
-                : path_(path) {
-            infile_.open(path);
-            if (infile_.is_open()) {
-                std::cout << "File opened successfully: " << path << std::endl;
-            } else {
-                std::cout << "Failed to open file: " << path << std::endl;
-            }
-        }
-
-        virtual ~FileReader() {
-            if (infile_.is_open()) {
-                infile_.close();
-                infile_.clear();
-            }
-        }
-
-        // get the next line of the trace
-        std::string getNextLine() {
-            std::string line;
-            if (!std::getline(infile_, line)) 
-                throw cachelib::cachebench::EndOfTrace(folly::sformat("End of trace: {}", path_));
-            return line; 
-        }
-    
-    private:
-        std::string path_; 
-        std::ifstream infile_;
-};
-
-
 class BlockReplayGenerator : public GeneratorBase {
     public:
-
         explicit BlockReplayGenerator(const StressorConfig& config)
-        :   config_(config) {
+            :   config_(config),
+                streamVec_(config_.blockReplayConfig.traces.size()),
+                lineCountVec_(config_.blockReplayConfig.traces.size(), 0),
+                lastTsVec_(config_.blockReplayConfig.traces.size(), 0),
+                lastOpVec_(config_.blockReplayConfig.traces.size(), OpType::kGet),
+                lastLbaVec_(config_.blockReplayConfig.traces.size(), std::string(" ")),
+                lastSizeVec_(config_.blockReplayConfig.traces.size(), std::vector<size_t>{0}) {
             for (int traceIndex=0; traceIndex < config_.blockReplayConfig.traces.size(); traceIndex++) {
-                readers_.push_back(new FileReader(config_.blockReplayConfig.traces.at(traceIndex)));
+                lastRequestVec_.push_back(Request(lastLbaVec_.at(traceIndex), lastSizeVec_.at(traceIndex).begin(), lastSizeVec_.at(traceIndex).end(), lastOpVec_.at(traceIndex), lastTsVec_.at(traceIndex)));
+                streamVec_.at(traceIndex).open(config_.blockReplayConfig.traces.at(traceIndex));
             }
         }
 
         virtual ~BlockReplayGenerator() {
-            readers_.clear();
         }
 
         // not needed for block trace replay 
@@ -77,41 +45,69 @@ class BlockReplayGenerator : public GeneratorBase {
             std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
     private:
-        uint64_t requestCount_{0};
         const StressorConfig config_;
-        std::vector<FileReader*> readers_;
+
+        // vector of streams for each trace file 
+        std::vector<std::ifstream> streamVec_;
+
+        // vector of line count 
+        std::vector<uint64_t> lineCountVec_;
+
+        // all the params of previous request from each trace file 
+        std::vector<Request> lastRequestVec_;
+        std::vector<std::string> lastLbaVec_;
+        std::vector<OpType> lastOpVec_;
+        std::vector<std::vector<size_t>> lastSizeVec_;
+        std::vector<uint64_t> lastTsVec_;
 };
 
 
 // get the next block request 
 const Request& BlockReplayGenerator::getReq(uint8_t fileIndex, std::mt19937_64&, std::optional<uint64_t>) {
-    if (fileIndex >= readers_.size())
-        throw std::runtime_error(folly::sformat("There are {} traces but index {} was requested in BlockReplayGenerator.\n", readers_.size(), fileIndex));
+    if (fileIndex >= streamVec_.size())
+        throw std::runtime_error(folly::sformat("{} traces but index {} was requested.\n", streamVec_.size(), fileIndex));
+    
+    std::string line("");
+    if (!std::getline(streamVec_.at(fileIndex), line)) {
+        throw cachelib::cachebench::EndOfTrace("End of trace replay \n");
+    }
 
-    std::string line = readers_.at(fileIndex)->getNextLine();
+    lineCountVec_.at(fileIndex)++;
+    std::stringstream row_stream(line);
+    std::string token;
 
-    // split the file 
-    std::vector<folly::StringPiece> fields;
-    folly::split(",", line, fields);
+    // Timestamp 
+    std::getline(row_stream, token, ',');
+    uint64_t ts = std::stoul(token);
+    lastTsVec_.at(fileIndex) = ts;
 
-    std::cout << folly::sformat("FIELDS HAVE {}\n", fields.size());
+    // LBA
+    std::getline(row_stream, token, ',');
+    lastLbaVec_.at(fileIndex) = token;
 
-    // split line 
-    // uint64_t ts = folly::tryTo<uint64_t>(fields[0]);
-    // uint64_t lba = folly::tryTo<size_t>(fields[1]);
-    // std::string op = folly::tryTo<std::string>(fields[2]);
-    // std::string size = folly::tryTo<size_t>(fields[3]);
+    // Operation (read/write)
+    std::getline(row_stream, token, ',');
+    OpType op;
+    if (token == "r")
+        op = OpType::kGet;
+    else if (token == "w")
+        op = OpType::kSet;
+    else
+        throw std::invalid_argument(folly::sformat("Unrecognized Operation {} in the trace file!", token));
+    lastOpVec_.at(fileIndex) = op;
 
-    // std::cout << folly::sformat("{}\n", line);
-    // std::cout << folly::sformat("{},{},{},{}\n", ts, lba, op, size);
+    // Size 
+    std::getline(row_stream, token, ',');
+    uint64_t size = std::stoul(token);
+    lastSizeVec_.at(fileIndex).at(0) = size;
 
-    // create the same fake request for now 
-    std::string oneHitKey = "key";
-    std::vector<size_t> sizes{100};
-    const Request& req(Request(oneHitKey, sizes.begin(), sizes.end(), OpType::kGet, 100));
+    // update the request 
+    lastRequestVec_.at(fileIndex).setOp(op);
+    *(lastRequestVec_.at(fileIndex).sizeBegin) = lastSizeVec_.at(fileIndex).at(0);
+    lastRequestVec_.at(fileIndex).timestamp = lastTsVec_.at(fileIndex);
+    lastRequestVec_.at(fileIndex).key = lastLbaVec_.at(fileIndex);
 
-    requestCount_++;
-    return req;
+    return lastRequestVec_.at(fileIndex);
 }
 
 }
