@@ -5,6 +5,7 @@
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
+#include "cachelib/cachebench/runner/BackingStore.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Request.h"
@@ -16,6 +17,11 @@ using namespace std::chrono_literals;
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+class PendingBlockRequest {
+    public:
+        PendingBlockRequest(){}
+}
 
 
 // A block storage system stressor that uses an instance of CacheLib 
@@ -35,7 +41,8 @@ class BlockStorageSystemStressor : public Stressor {
             :   config_(std::move(config)),
                 wg_(std::move(generator)),
                 blockReplayStatVec_(config.numThreads),
-                stressorThreadTerminateFlag_(config.numThreads, false),
+                backingStore_(config),
+                stressorTerminateFlag_(config.numThreads, false),
                 endTime_{std::chrono::system_clock::time_point::max()} {
 
             // setup the cache 
@@ -52,7 +59,8 @@ class BlockStorageSystemStressor : public Stressor {
                 std::lock_guard<std::mutex> l(timeMutex_);
                 startTime_ = std::chrono::system_clock::now();
             }
-            stressWorker_ = std::thread([this] {
+            backgroundProcessThreads_ = std::thread([this] {
+                
                 std::vector<std::thread> workers;
                 for (uint64_t i = 0; i < config_.numThreads; ++i) {
                     workers.push_back(std::thread([this, blockReplayStats = &blockReplayStatVec_.at(i), index=i]() {
@@ -72,8 +80,10 @@ class BlockStorageSystemStressor : public Stressor {
 
         // wait for worker threads to terminate and cleanup 
         void finish() override {
-            if (stressWorker_.joinable()) {
-                stressWorker_.join();
+            if (backgroundProcessThreads_.joinable()) {
+                
+                backgroundProcessThreads_.join();
+                
             }
             wg_->markShutdown();
             cache_->clearCache(config_.maxInvalidDestructorCount);
@@ -127,14 +137,22 @@ class BlockStorageSystemStressor : public Stressor {
         }
 
         // worker threads doing replay, block request processing, async IO return processing, stat printing
-        std::thread stressWorker_;
+        std::thread backgroundProcessThreads_;
+        
+        // class to interact with the backing store through files on backing store devices 
+        BackingStore backingStore_;
 
+        // cache created based on the cache config 
         std::unique_ptr<CacheT> cache_;
+
+        // configuration of block storage system stressor 
         const StressorConfig config_; 
 
         // NOTE: we have only tried this stressor with BlockReplayGenerator 
         std::unique_ptr<GeneratorBase> wg_; 
-        std::vector<bool>stressorThreadTerminateFlag_;
+
+        // flag indicating whether each replay thread has terminated 
+        std::vector<bool>stressorTerminateFlag_;
 
         // tracking time elapsed at any point in time during runtime 
         mutable std::mutex timeMutex_;
@@ -145,6 +163,9 @@ class BlockStorageSystemStressor : public Stressor {
         // separately and/or aggregated to generate global statistics 
         // TODO: implement a new stat class called BlockReplayStats
         std::vector<ThroughputStats> blockReplayStatVec_;
+
+        std::vector<PendingBlockRequest> pendingBlockRequestVec_;
+        std::queue<uint64_t> blockRequestIndexQueue_;
 };
 
 

@@ -30,15 +30,19 @@ struct BlockReplayConfig : public JSONConfig {
 
   explicit BlockReplayConfig(const folly::dynamic& configJson);
 
-  // the number of traces and disk files should be equal 
+  // the number of traces, disk files and minimum LBA should be equal
   std::vector<std::string> traces{};
+  std::vector<std::uint64_t> minLbaVec{};
   std::vector<std::string> diskFiles{};
 
   uint32_t lbaSizeByte{512};
   uint32_t blockSizeByte{4096};
 
-  // maximum number of outstanding block requests at a time 
-  uint32_t queueSize{128};
+  // maximum number of outstanding block requests before blocking 
+  uint32_t maxPendingBlockRequestCount{128};
+
+  // maximum number of outstanding backing store IOs before blocking 
+  uint32_t maxPendingBackingStoreIoCount{64000};
 
   // threads allocated to pop block requests from a queue and process them 
   uint32_t blockRequestProcesserThreads{16};
