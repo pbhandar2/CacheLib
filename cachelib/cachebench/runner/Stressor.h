@@ -28,6 +28,13 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+struct BlockReplayStats {
+  uint64_t readBlockRequestCount{0};
+  uint64_t writeBlockRequestCount{0};
+  uint64_t readBlockRequestByte{0};
+  uint64_t writeBlockRequestByte{0};
+};
+
 // Stats to track the throughput of the stress run. This is updated on every
 // stressor thread and aggregated once the stress test finishes.
 struct ThroughputStats {
@@ -97,10 +104,16 @@ class Stressor {
   // abort the run
   virtual void abort() { stopTest(); }
 
+  virtual bool isBlockReplay() { return blockReplay_; };
+
+  virtual void setBlockReplay() { blockReplay_ = true; };
+
  protected:
   // check whether the load test should stop. e.g. user interrupt the
   // cachebench.
   bool shouldTestStop() { return stopped_.load(std::memory_order_acquire); }
+
+  bool blockReplay_ = false;
 
   // Called when stop request from user is captured. instead of stop the load
   // test immediately, the method sets the state "stopped_" to true. Actual

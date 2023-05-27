@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/runner/Runner.h"
 
 #include "cachelib/cachebench/runner/Stressor.h"
@@ -23,7 +24,9 @@ namespace cachelib {
 namespace cachebench {
 Runner::Runner(const CacheBenchConfig& config)
     : stressor_{Stressor::makeStressor(config.getCacheConfig(),
-                                       config.getStressorConfig())} {}
+                                       config.getStressorConfig())} {
+                                      stressorConfig_ = config.getStressorConfig();
+}
 
 bool Runner::run(std::chrono::seconds progressInterval,
                  const std::string& progressStatsFile) {
@@ -41,18 +44,22 @@ bool Runner::run(std::chrono::seconds progressInterval,
   auto cacheStats = stressor_->getCacheStats();
   auto opsStats = stressor_->aggregateThroughputStats();
   tracker.stop();
+  
+  if (std::string(stressorConfig_.name) == "block-storage") {
+    return cacheStats.renderIsTestPassed(std::cout);
+  } else {
+    std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
+    cacheStats.render(std::cout);
 
-  std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats.render(std::cout);
+    std::cout << "\n== Throughput for  ==\n";
+    opsStats.render(durationNs, std::cout);
 
-  std::cout << "\n== Throughput for  ==\n";
-  opsStats.render(durationNs, std::cout);
+    stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
+    std::cout << std::endl;
 
-  stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
-  std::cout << std::endl;
-
-  stressor_.reset();
-  return cacheStats.renderIsTestPassed(std::cout);
+    stressor_.reset();
+    return cacheStats.renderIsTestPassed(std::cout);
+  }
 }
 
 void Runner::run(folly::UserCounters& counters) {

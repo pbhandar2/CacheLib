@@ -580,13 +580,14 @@ class BlockStorageSystemStressor : public Stressor {
         }
 
         void replayTimer(uint64_t traceTs) {
+            uint64_t currentTime;
         }
 
         // Replays a block trace on a Cachelib cache and files in backing store. 
         //
         // @param stats       Block replay stats 
         // @param fileIndex   The index used to map to resources of the file being replayed 
-        void stressByBlockReplay(ThroughputStats& stats, uint64_t threadId) {
+        void stressByBlockReplay(BlockReplayStats& stats, uint64_t threadId) {
             // get the request from the block trace  
             std::mt19937_64 gen(folly::Random::rand64());
             std::optional<uint64_t> lastRequestId = std::nullopt;
@@ -604,6 +605,8 @@ class BlockStorageSystemStressor : public Stressor {
             }
             wg_->markFinish();
             stressorTerminateFlag_.at(threadId) = true;
+
+            // notify backing store if all replay threads are done 
             if (isReplayDone()) 
                 backingStore_.setReplayDone();
         }
@@ -620,8 +623,11 @@ class BlockStorageSystemStressor : public Stressor {
         // configuration of block storage system stressor 
         const StressorConfig config_; 
 
+        // the string used as data when data is sent to cache 
         const std::string hardcodedString_;
 
+        // the size of a block and a logical block address 
+        // default: block=4096 bytes, lba=512 bytes
         uint64_t blockSizeByte_;
         uint64_t lbaSizeByte_;
 
@@ -639,7 +645,7 @@ class BlockStorageSystemStressor : public Stressor {
         // vector of stats from each replay thread which can be collected 
         // separately and/or aggregated to generate global statistics 
         // TODO: implement a new stat class called BlockReplayStats
-        std::vector<ThroughputStats> blockReplayStatVec_;
+        std::vector<BlockReplayStats> blockReplayStatVec_;
 
         // vector of pending block requests in the system 
         // adjust maxPendingBlockRequestCount in config_.blockReplayConfig to adjust the size 

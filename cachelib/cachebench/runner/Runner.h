@@ -57,9 +57,19 @@ class Runner {
     }
   }
 
+  void setBlockReplay() {
+    blockReplayFlag_ = true;
+  }
+
+  bool getBlockReplay() {
+    return blockReplayFlag_;
+  }
+
  private:
   // instance of the stressor.
   std::unique_ptr<Stressor> stressor_;
+  bool blockReplayFlag_ = false;
+  StressorConfig stressorConfig_;
 };
 } // namespace cachebench
 } // namespace cachelib
