@@ -27,7 +27,7 @@ namespace cachebench {
 
 BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, traces);
-  JSONSetVal(configJson, diskFiles);
+  JSONSetVal(configJson, backingFiles);
   JSONSetVal(configJson, lbaSizeByte);
   JSONSetVal(configJson, blockSizeByte);
   JSONSetVal(configJson, maxPendingBlockRequestCount);

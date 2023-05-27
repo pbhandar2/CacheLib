@@ -33,7 +33,7 @@ struct BlockReplayConfig : public JSONConfig {
   // the number of traces, disk files and minimum LBA should be equal
   std::vector<std::string> traces{};
   std::vector<std::uint64_t> minLbaVec{};
-  std::vector<std::string> diskFiles{};
+  std::vector<std::string> backingFiles{};
 
   uint32_t lbaSizeByte{512};
   uint32_t blockSizeByte{4096};
