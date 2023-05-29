@@ -24,6 +24,16 @@ void ObjectCacheSizeController<AllocatorT>::work() {
     return;
   }
   auto totalObjSize = objCache_.getTotalObjectSize();
+  if (objCache_.config_.fragmentationTrackingEnabled &&
+      folly::usingJEMalloc()) {
+    auto [jemallocAllocatedBytes, jemallocActiveBytes] =
+        trackJemallocMemStats();
+    // proportionally add Jemalloc external fragmentation bytes (i.e.
+    // jemallocActiveBytes - jemallocAllocatedBytes)
+    totalObjSize = static_cast<size_t>(
+        1.0 * totalObjSize / jemallocAllocatedBytes * jemallocActiveBytes);
+  }
+
   // Do the calculation only when total object size or total object number
   // achieves the threshold. This is to avoid unreliable calculation of average
   // object size when the cache is new and only has a few objects.
@@ -61,6 +71,10 @@ void ObjectCacheSizeController<AllocatorT>::work() {
                    "{}, new entries limit = {}, current entries limit = {}",
                    totalObjSize, currentNumEntries, averageObjSize,
                    newEntriesLimit, currentEntriesLimit_);
+  }
+
+  if (objCache_.config_.objectSizeDistributionTrackingEnabled) {
+    trackObjectSizeDistributionStats();
   }
 }
 
@@ -105,6 +119,29 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
       "CacheLib size-controller: request to expand cache by {} entries. "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, before, objCache_.getNumPlaceholders(), currentEntriesLimit_);
+}
+
+template <typename AllocatorT>
+void ObjectCacheSizeController<AllocatorT>::getCounters(
+    const util::CounterVisitor& visitor) const {
+  visitor("objcache.num_placeholders", objCache_.getNumPlaceholders());
+  if (folly::usingJEMalloc()) {
+    auto [jemallocAllocatedBytes, jemallocActiveBytes] =
+        trackJemallocMemStats();
+    visitor("objcache.jemalloc_active_bytes", jemallocActiveBytes);
+    visitor("objcache.jemalloc_allocated_bytes", jemallocAllocatedBytes);
+  }
+  if (objCache_.config_.objectSizeDistributionTrackingEnabled) {
+    constexpr folly::StringPiece fmt = "{}_p{}";
+    constexpr folly::StringPiece prefix =
+        "objcache.size_distribution.object_size_bytes";
+
+    for (auto quantile : objectSizeBytesHist_.quantiles()) {
+      visitor(
+          folly::sformat(fmt, prefix, static_cast<uint32_t>(quantile * 100)),
+          objectSizeBytesHist_.estimateQuantile(quantile));
+    }
+  }
 }
 
 template <typename AllocatorT>

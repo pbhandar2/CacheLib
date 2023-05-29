@@ -130,6 +130,9 @@ struct ObjectCacheConfig {
       SerializeCb serializeCallback,
       DeserializeCb deserializeCallback);
 
+  // Enable tracking Jemalloc external fragmentation.
+  ObjectCacheConfig& enableFragmentationTracking();
+
   ObjectCacheConfig& setItemReaperInterval(std::chrono::milliseconds interval);
 
   ObjectCacheConfig& setEvictionPolicyConfig(
@@ -163,6 +166,14 @@ struct ObjectCacheConfig {
 
   // If this is enabled, user has to pass the object size upon insertion
   bool objectSizeTrackingEnabled{false};
+
+  // If this is enabled, we will track Jemalloc external fragmentation and add
+  // the fragmentation bytes on top of total object size to bound the cache
+  bool fragmentationTrackingEnabled{false};
+
+  // If this is enabled, we will track the object size distribution and export
+  // the stats to ods.
+  bool objectSizeDistributionTrackingEnabled{false};
 
   // Period to fire size controller in milliseconds. 0 means size controller is
   // disabled.
@@ -275,6 +286,12 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setSizeControllerThrottlerConfig(
     util::Throttler::Config config) {
   sizeControllerThrottlerConfig = config;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enableFragmentationTracking() {
+  fragmentationTrackingEnabled = true;
   return *this;
 }
 
@@ -393,6 +410,18 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
       throw std::invalid_argument(
           "Only one of sizeControllerIntervalMs and cacheSizeLimit is set");
     }
+  }
+
+  if (fragmentationTrackingEnabled && !objectSizeTrackingEnabled) {
+    throw std::invalid_argument(
+        "Object size tracking has to be enabled to have fragmentation "
+        "tracking");
+  }
+
+  if (objectSizeDistributionTrackingEnabled && !objectSizeTrackingEnabled) {
+    throw std::invalid_argument(
+        "Object size tracking has to be enabled to track object size "
+        "distribution");
   }
   return *this;
 }
