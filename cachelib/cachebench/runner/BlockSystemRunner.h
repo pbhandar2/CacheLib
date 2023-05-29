@@ -15,7 +15,9 @@ class BlockSystemRunner {
         BlockSystemRunner(const CacheBenchConfig& config);
 
         bool run();
-
+    private:
+        // instance of the stressor.
+        std::unique_ptr<BlockSystemStressor> stressor_;
 };
 
 }

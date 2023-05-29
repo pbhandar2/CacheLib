@@ -15,6 +15,7 @@
  */
 
 #include "cachelib/cachebench/runner/Stressor.h"
+#include "cachelib/cachebench/runner/BlockStorageStressor.h"
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
@@ -211,6 +212,23 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   }
   throw std::invalid_argument("Invalid config");
 }
+
+std::unique_ptr<BlockSystemStressor> BlockSystemStressor::makeBlockSystemStressor(
+    const CacheConfig& cacheConfig, const StressorConfig& stressorConfig) {
+  // make the workload generator first 
+  auto generator = makeGenerator(stressorConfig);
+  if (cacheConfig.allocator == "LRU") {
+    // default allocator is LRU, other allocator types should be added here
+    return std::make_unique<BlockStorageStressor<LruAllocator>>(
+        cacheConfig, stressorConfig, std::move(generator));
+  } else if (cacheConfig.allocator == "LRU2Q") {
+    return std::make_unique<BlockStorageStressor<Lru2QAllocator>>(
+        cacheConfig, stressorConfig, std::move(generator));
+  } else {
+    throw std::runtime_error("Allocator can be LRU or LRU2Q \n");
+  }
+}
+
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

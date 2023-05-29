@@ -5,9 +5,16 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config){}
+
+BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config)
+    : stressor_{BlockSystemStressor::makeBlockSystemStressor(config.getCacheConfig(),
+                                        config.getStressorConfig())} {
+}
 
 bool BlockSystemRunner::run() {
+    std::cout << "WELCOME TO BLOCK RUNNER \n";
+    stressor_->start();
+    stressor_->finish();
     return true; 
 }
 

@@ -175,6 +175,7 @@ class BackingStore {
             timeout.tv_sec = 0;
             timeout.tv_nsec = 100; // 1ns
             while ((!replayDone_) || (pendingIoCount_ > 0)) {
+                // std::cout << folly::sformat("Backing pending: {}\n", pendingIoCount_);
                 int ret = io_getevents(*ctx_, 1, maxPendingBackingStoreIoCount_, events, &timeout);
                 if (ret <= 0)
                     continue;

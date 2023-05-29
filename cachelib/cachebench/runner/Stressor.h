@@ -33,6 +33,8 @@ struct BlockReplayStats {
   uint64_t writeBlockRequestCount{0};
   uint64_t readBlockRequestByte{0};
   uint64_t writeBlockRequestByte{0};
+
+  util::PercentileStats *backingReadSizePercentile_;
 };
 
 // Stats to track the throughput of the stress run. This is updated on every
@@ -66,6 +68,37 @@ struct ThroughputStats {
 
 // forward declaration for the workload generator.
 class GeneratorBase;
+
+// Skeleton interface for a workload stressor. All stressors implement this
+// interface.
+class BlockSystemStressor {
+  public:
+  // create a stressor according to the passed in config and return through an
+  // opaque base class instance.
+  static std::unique_ptr<BlockSystemStressor> makeBlockSystemStressor(
+        const CacheConfig& cacheConfig, const StressorConfig& stressorConfig);
+
+  virtual ~BlockSystemStressor() {}
+
+  // start the stress run.
+  virtual void start() = 0;
+
+  // wait until the stress run finishes
+  virtual void finish() = 0;
+
+  // report the stats from the cache  while the stress test is being run.
+  virtual BlockReplayStats getReplayStats(uint64_t threadId) const = 0;
+
+  // Called when stop request from user is captured. instead of stop the load
+  // test immediately, the method sets the state "stopped_" to true. Actual
+  // stop logic is in somewhere else.
+  void stopTest() { stopped_.store(true, std::memory_order_release); }
+
+ private:
+  // status that indicates if the runner has indicated the stress test to be
+  // stopped before completion.
+  std::atomic<bool> stopped_{false};
+};
 
 // Skeleton interface for a workload stressor. All stressors implement this
 // interface.
