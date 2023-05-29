@@ -23,6 +23,7 @@ add_library (cachelib_cachebench
   ./runner/IntegrationStressor.cpp
   ./runner/ProgressTracker.cpp
   ./runner/Runner.cpp
+  ./runner/BlockSystemRunner.cpp
   ./runner/Stressor.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp

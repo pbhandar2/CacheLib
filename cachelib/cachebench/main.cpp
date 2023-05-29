@@ -22,6 +22,7 @@
 #include <thread>
 
 #include "cachelib/cachebench/runner/Runner.h"
+#include "cachelib/cachebench/runner/BlockSystemRunner.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/common/Utils.h"
 
@@ -42,6 +43,7 @@ DEFINE_int32(fb303_port,
              "Port for cachebench fb303 service. If 0, do not export to fb303. "
              "If valid, this will disable ODSL export.");
 #endif
+DEFINE_bool(block_runner, true, "Use the block system runner");
 DEFINE_string(json_test_config,
               "",
               "path to test config. If empty, use default setting");
@@ -58,6 +60,7 @@ DEFINE_int32(timeout_seconds,
 
 struct sigaction act;
 std::unique_ptr<facebook::cachelib::cachebench::Runner> runnerInstance;
+std::unique_ptr<facebook::cachelib::cachebench::BlockSystemRunner> blockSystemRunnerInstance;
 std::unique_ptr<std::thread> stopperThread;
 
 void sigint_handler(int sig_num) {
@@ -143,15 +146,25 @@ int main(int argc, char** argv) {
 #endif
 
   try {
-    runnerInstance =
-        std::make_unique<facebook::cachelib::cachebench::Runner>(config);
-    setupSignalHandler();
-    setupTimeoutHandler();
+    if (FLAGS_block_runner) {
+      blockSystemRunnerInstance =
+          std::make_unique<facebook::cachelib::cachebench::BlockSystemRunner>(config);
+      setupSignalHandler();
+      setupTimeoutHandler();
+      return blockSystemRunnerInstance->run()
+                ? 0
+                : 1;
+    } else {
+      runnerInstance =
+          std::make_unique<facebook::cachelib::cachebench::Runner>(config);
+      setupSignalHandler();
+      setupTimeoutHandler();
+      return runnerInstance->run(std::chrono::seconds(FLAGS_progress),
+                                FLAGS_progress_stats_file)
+                ? 0
+                : 1;
+    }
 
-    return runnerInstance->run(std::chrono::seconds(FLAGS_progress),
-                               FLAGS_progress_stats_file)
-               ? 0
-               : 1;
   } catch (const std::exception& e) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;
