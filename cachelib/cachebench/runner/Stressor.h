@@ -29,12 +29,19 @@ namespace cachelib {
 namespace cachebench {
 
 struct BlockReplayStats {
-  uint64_t readBlockRequestCount{0};
-  uint64_t writeBlockRequestCount{0};
-  uint64_t readBlockRequestByte{0};
-  uint64_t writeBlockRequestByte{0};
 
-  util::PercentileStats *backingReadSizePercentile_;
+  uint64_t blockReqCount{0};
+  uint64_t readBlockReqCount{0};
+  uint64_t writeBlockReqCount{0};
+  uint64_t readBlockReqByte{0};
+  uint64_t writeBlockReqByte{0};
+
+  uint64_t physicalClockAheadCount{0};
+
+  util::PercentileStats *physicalClockErrorPercentile_ = new util::PercentileStats();
+  util::PercentileStats *physicalIatPercentile_ = new util::PercentileStats();
+  util::PercentileStats *iatErrorPercentile_ = new util::PercentileStats();
+
 };
 
 // Stats to track the throughput of the stress run. This is updated on every

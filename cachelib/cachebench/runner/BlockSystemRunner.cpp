@@ -12,9 +12,11 @@ BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config)
 }
 
 bool BlockSystemRunner::run() {
-    std::cout << "WELCOME TO BLOCK RUNNER \n";
     stressor_->start();
     stressor_->finish();
+
+    //BlockReplayStats stats = stressor_.getReplayStats(0);
+
     return true; 
 }
 
