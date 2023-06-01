@@ -34,6 +34,51 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+
+void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) const {
+  out << folly::sformat("blockReqCount={}{}", blockReqCount, delimiter);
+  renderPercentile(out, "physicalClockError", "%", delimiter, physicalClockPercentErrorPercentile);
+  renderPercentile(out, "physicalIat", "us", delimiter, physicalIatUsPercentile);
+  renderPercentile(out, "traceIat", "us", delimiter, traceIatUsPercentile);
+}
+
+
+void BlockReplayStats::renderPercentile(std::ostream& out, 
+                                          folly::StringPiece describe, 
+                                          folly::StringPiece unit, 
+                                          folly::StringPiece delimiter, 
+                                          util::PercentileStats *stats) const {
+    auto printLatencies =
+        [&out](folly::StringPiece cat, folly::StringPiece unit, folly::StringPiece delimiter,
+                const util::PercentileStats::Estimates& latency) {
+        auto fmtLatency = [&out, &cat, &unit, &delimiter](folly::StringPiece pct, uint64_t val) {
+            out << folly::sformat("{}_{}_{}={}{}", cat, pct, unit, val, delimiter);
+        };
+
+        fmtLatency("avg", latency.avg);
+        fmtLatency("p0", latency.p0);
+        fmtLatency("p5", latency.p5);
+        fmtLatency("p10", latency.p10);
+        fmtLatency("p25", latency.p25);
+        fmtLatency("p50", latency.p50);
+        fmtLatency("p75", latency.p75);
+        fmtLatency("p90", latency.p90);
+        fmtLatency("p95", latency.p95);
+        fmtLatency("p99", latency.p99);
+        fmtLatency("p999", latency.p999);
+        fmtLatency("p9999", latency.p9999);
+        fmtLatency("p99999", latency.p99999);
+        fmtLatency("p999999", latency.p999999);
+        fmtLatency("p100", latency.p100);
+      };
+
+  util::PercentileStats::Estimates est = stats->estimate();
+  printLatencies(describe, unit, delimiter, est);
+
+}
+
+
 ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   set += other.set;
   setFailure += other.setFailure;

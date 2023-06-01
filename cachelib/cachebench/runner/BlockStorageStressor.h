@@ -237,7 +237,7 @@ class BlockStorageStressor : public BlockSystemStressor {
             cache_->clearCache(config_.maxInvalidDestructorCount);
         }
 
-        BlockReplayStats getReplayStats(uint64_t threadId) const override {
+        BlockReplayStats getStat(uint64_t threadId) const override {
             return statsVec_.at(threadId);
         }
 
@@ -331,7 +331,12 @@ class BlockStorageStressor : public BlockSystemStressor {
         }
         int64_t timeDiffNs = traceTimeElapsedNs - getTestDurationNs();
         uint64_t physicalClockError = (100*abs(timeDiffNs))/traceTimeElapsedNs;
-        stats.physicalClockErrorPercentile->trackValue(physicalClockError);
+        stats.physicalClockPercentErrorPercentile->trackValue(physicalClockError);
+
+        physicalIatUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                                            std::chrono::system_clock::now() - previousSubmitTimepoint).count();
+        stats.physicalIatUsPercentile->trackValue(physicalIatUs);
+        stats.traceIatUsPercentile->trackValue(traceIatUs);
     }
 
     // Replays a block trace on a Cachelib cache and files in backing store. 
@@ -352,7 +357,7 @@ class BlockStorageStressor : public BlockSystemStressor {
                 reqCount++;
                 uint64_t ts = req.timestamp; 
                 if (reqCount > 1) {
-                    replayTimer(stats, ts - startTs, prevTs, previousSubmitTimepoint);
+                    replayTimer(stats, ts - startTs, prevTs - startTs, previousSubmitTimepoint);
                 }
                 previousSubmitTimepoint = std::chrono::system_clock::now();
                 submitToBlockStorageSystem(req, threadId);
@@ -362,6 +367,7 @@ class BlockStorageStressor : public BlockSystemStressor {
         } catch (const cachebench::EndOfTrace& ex) {
         }
         
+        stats.replayTimeNs = getTestDurationNs();
         wg_->markFinish();
         stressorTerminateFlag_.at(threadId) = true;
         // notify backing store if all replay threads are done 

@@ -15,7 +15,8 @@ bool BlockSystemRunner::run() {
     stressor_->start();
     stressor_->finish();
 
-    //BlockReplayStats stats = stressor_.getReplayStats(0);
+    BlockReplayStats stats = stressor_->getStat(0);
+    stats.render(std::cout, "\n");
 
     return true; 
 }
