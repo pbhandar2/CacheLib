@@ -11,7 +11,8 @@
         "blockReplayConfig": {
             "traces": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv"],
             "backingFiles": ["/users/pbhandar/disk/disk.file"],
-            "globalClock": false
+            "globalClock": false,
+            "minSleepTimeNs": 5000
         }
     }
 }

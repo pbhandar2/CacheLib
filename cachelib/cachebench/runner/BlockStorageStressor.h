@@ -284,8 +284,24 @@ class BlockStorageStressor : public BlockSystemStressor {
         }
 
     void statUpdate(uint64_t blockReqIndex, uint64_t threadId) {
+        uint64_t offset;
+        uint64_t size;
+        bool writeFlag; 
+
+        offset = pendingBlockReqVec_.at(blockReqIndex).getOffset();
+        size = pendingBlockReqVec_.at(blockReqIndex).getSize();
+        writeFlag = pendingBlockReqVec_.at(blockReqIndex).getWriteFlag();
+        
         std::lock_guard<std::mutex> l(statUpdateLockVec_.at(threadId));
         statsVec_.at(threadId).blockReqCount++;
+
+        if (writeFlag) {
+            statsVec_.at(threadId).writeBlockReqCount++;
+            statsVec_.at(threadId).writeBlockReqByte += size;
+        } else {
+            statsVec_.at(threadId).readBlockReqCount++;
+            statsVec_.at(threadId).readBlockReqByte += size;
+        }
     }
 
     bool isReplayDone() {
@@ -399,7 +415,6 @@ class BlockStorageStressor : public BlockSystemStressor {
                 offset = pendingBlockReqVec_.at(pendingBlockRequestIndex).getOffset();
                 size = pendingBlockReqVec_.at(pendingBlockRequestIndex).getSize();
                 writeFlag = pendingBlockReqVec_.at(pendingBlockRequestIndex).getWriteFlag();
-                std::cout << folly::sformat("{},{},{}\n", threadId, offset, size);
             }
             submitToBackingStore(pendingBlockRequestIndex, threadId, offset, size, writeFlag, blockCompletionVec);
         }
@@ -582,13 +597,13 @@ class BlockStorageStressor : public BlockSystemStressor {
         if (reqCount > 1) 
             replayTimer(stats, traceTimeElapsedUs, prevTraceTimeElapsedUs, prevSubmitTimepoint);
         
-        SystemTimepoint submitTimepoint = std::chrono::system_clock::now();
         uint64_t submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
         while (submitIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
             submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
-        
+
         addToQueue(submitIndex);
-        return submitTimepoint;
+        SystemTimepoint newPrevSubmitTimepoint = std::chrono::system_clock::now();
+        return newPrevSubmitTimepoint;
     }
 
     // time the replay according to the trace timestamps 
@@ -609,9 +624,10 @@ class BlockStorageStressor : public BlockSystemStressor {
         else 
             sleepTimeNs = (traceIatUs - physicalIatUs)*1000;
         
-        if (sleepTimeNs > 0)
-            std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
-        else 
+        if (sleepTimeNs > 0) {
+            if (sleepTimeNs >= config_.blockReplayConfig.minSleepTimeNs)
+                std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
+        } else 
             stats.physicalClockAheadCount++;
         
         int64_t timeDiffNs = traceTimeElapsedNs - getTestDurationNs();

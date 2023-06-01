@@ -38,6 +38,12 @@ namespace cachebench {
 
 void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) const {
   out << folly::sformat("blockReqCount={}{}", blockReqCount, delimiter);
+  out << folly::sformat("readBlockReqCount={}{}", readBlockReqCount, delimiter);
+  out << folly::sformat("writeBlockReqCount={}{}", writeBlockReqCount, delimiter);
+  out << folly::sformat("readBlockReqByte={}{}", readBlockReqByte, delimiter);
+  out << folly::sformat("writeBlockReqByte={}{}", writeBlockReqByte, delimiter);
+
+  out << folly::sformat("physicalClockAheadCount={}{}", physicalClockAheadCount, delimiter);
   renderPercentile(out, "physicalClockError", "%", delimiter, physicalClockPercentErrorPercentile);
   renderPercentile(out, "physicalIat", "us", delimiter, physicalIatUsPercentile);
   renderPercentile(out, "traceIat", "us", delimiter, traceIatUsPercentile);

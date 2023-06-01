@@ -35,6 +35,7 @@ BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, blockRequestProcesserThreads);
   JSONSetVal(configJson, globalClock);
   JSONSetVal(configJson, idleWaitTimeUs);
+  JSONSetVal(configJson, minSleepTimeNs);
   checkCorrectSize<BlockReplayConfig, 112>();
 }
 
