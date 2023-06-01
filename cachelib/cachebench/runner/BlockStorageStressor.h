@@ -29,7 +29,7 @@ class BlockRequest {
             size_ = size;
             writeFlag_ = writeFlag;
             blockRequestIndex_ = blockRequestIndex;
-            threadId_ = threadId_;
+            threadId_ = threadId;
 
             offsetByte_ = lba_ * lbaSizeByte_;
             startBlock_ = floor(offsetByte_/blockSizeByte_);
@@ -65,6 +65,8 @@ class BlockRequest {
 
         void reset() {
             size_ = 0;
+            blockHitCount_ = 0;
+            readHitByte_ = 0; 
             blockIoCompletionVec_.clear();
         }
 
@@ -108,6 +110,14 @@ class BlockRequest {
             return offsetByte_;
         }
 
+        uint64_t getReadHitByte() {
+            return readHitByte_;
+        }
+
+        uint64_t getBlockHitCount() {
+            return blockHitCount_;
+        }
+
         std::vector<bool> getBlockIoCompletionVec() {
             return blockIoCompletionVec_;
         }
@@ -118,6 +128,14 @@ class BlockRequest {
                                                                                                             blockIoCompletionVec_.size(), 
                                                                                                             writeFlag_));
             blockIoCompletionVec_.at(blockIndex) = true; 
+            blockHitCount_++;
+            if ((blockIndex == 0) & (frontMisalignByte_ > 0)) {
+                readHitByte_ += (blockSizeByte_ - frontMisalignByte_);
+            } else if ((blockIndex == (blockIoCompletionVec_.size()-1)) & (rearMisalignByte_ > 0)) {
+                readHitByte_ += (blockSizeByte_ - rearMisalignByte_);
+            } else {
+                readHitByte_ += blockSizeByte_;
+            }
         }
 
         void backingIoReturn(uint64_t backingOffset, uint64_t backingSize, bool backingWriteFlag) {
@@ -157,6 +175,8 @@ class BlockRequest {
     private:
         bool writeFlag_;
         uint64_t size_ = 0;
+        uint64_t blockHitCount_ = 0;
+        uint64_t readHitByte_ = 0;
         uint64_t lba_;
         uint64_t offsetByte_;
         uint64_t ts_;
@@ -195,6 +215,7 @@ class BlockStorageStressor : public BlockSystemStressor {
                                     stressorTerminateFlag_(config.numThreads, false),
                                     statsVec_(config.numThreads),
                                     wg_(std::move(generator)),
+                                    statUpdateLockVec_(config.numThreads),
                                     endTime_{std::chrono::system_clock::time_point::max()} {
             // setup the cache 
             cache_ = std::make_unique<CacheT>(cacheConfig);
@@ -206,18 +227,33 @@ class BlockStorageStressor : public BlockSystemStressor {
             finish(); 
         }
 
+        // start stressing the block storage system 
         void start() override {
             {
                 std::lock_guard<std::mutex> l(timeMutex_);
                 startTime_ = std::chrono::system_clock::now();
             }
             threads_ = std::thread([this] {
+                
                 std::vector<std::thread> workers;
                 for (uint64_t i = 0; i < config_.numThreads; ++i) {
-                    workers.push_back(std::thread([this, stats=&statsVec_.at(i), index=i]() {
-                        stressByBlockReplay(*stats, index);
+                    workers.push_back(std::thread([this, blockReplayStats = &statsVec_.at(i), index=i]() {
+                        stressByBlockReplay(*blockReplayStats, index);
                     }));
                 }
+
+                for (uint64_t i = 0; i < config_.blockReplayConfig.blockRequestProcesserThreads; ++i) {
+                    workers.push_back(std::thread([this]() {
+                        processBlockStorageRequestThread();
+                    }));
+                }
+
+                for (uint64_t i = 0; i < config_.blockReplayConfig.asyncIOReturnTrackerThreads; ++i) {
+                    workers.push_back(std::thread([this]() {
+                        processBackingIoReturn();
+                    }));
+                }
+
                 for (auto& worker : workers) {
                     worker.join();
                 }
@@ -247,13 +283,264 @@ class BlockStorageStressor : public BlockSystemStressor {
                     .count();
         }
 
+    void statUpdate(uint64_t blockReqIndex, uint64_t threadId) {
+        std::lock_guard<std::mutex> l(statUpdateLockVec_.at(threadId));
+        statsVec_.at(threadId).blockReqCount++;
+    }
+
     bool isReplayDone() {
         return std::all_of(stressorTerminateFlag_.begin(), stressorTerminateFlag_.end(), [](bool b){ return b; });
     }
 
+    // Checks if the block related to the LBA of a replay thread exists in cache 
+    // @param blockId       the unique ID of the block being accessed
+    // @param threadId      the ID of the replay thread to which the LBA belongs 
+    bool blockInCache(uint64_t blockId, uint64_t threadId) {
+        bool blockInCache = false;
+        // the key = blockId + threadId (e.g. key = '14' + '1' = '141') to differentiate the 
+        // same block being accessed by different replay threads which are two different blocks of data
+        const std::string key = folly::sformat("{}{}", blockId, threadId);
+        auto it = cache_->find(key);
+        if (it != nullptr)     
+            blockInCache = true; 
+        return blockInCache;
+    }
+
     void addToQueue(uint64_t index) {
-        // std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
-        // blockRequestQueue_.push(index);
+        std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
+        blockRequestQueue_.push(index);
+    }
+
+    void setKeys(uint64_t startBlock, uint64_t endBlock) {
+        for (uint64_t curBlock=startBlock; curBlock<=endBlock; curBlock++) {
+            const std::string key = std::to_string(curBlock);
+            auto it = cache_->allocate(0, 
+                                key, 
+                                blockSizeByte_, 
+                                0);
+            if (it == nullptr) {
+                XDCHECK(it);
+                XDCHECK_LE(cache_->getSize(it), 4ULL * 1024 * 1024);
+                cache_->setStringItem(it, hardcodedString_);
+                cache_->insertOrReplace(it);
+            }
+        }
+    }
+
+    uint64_t popFromQueue() {
+        std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
+        uint64_t index = config_.blockReplayConfig.maxPendingBlockRequestCount;
+        if (blockRequestQueue_.size() > 0) {
+            index = blockRequestQueue_.front();
+            blockRequestQueue_.pop();
+        }
+        return index;
+    }
+
+    void processBackingIoReturn() {
+        while ((!isReplayDone()) || pendingBlockReqCount_ > 0) {
+            // pop the index of the backing store IO that has returned 
+            uint64_t index = backingStore_.popFromBackingIoReturnQueue();
+            if (index == config_.blockReplayConfig.maxPendingBackingStoreIoCount)
+                continue; 
+            
+            BackingIo backingIo = backingStore_.getBackingIo(index);
+            int64_t blockRequestIndex = backingIo.getBlockRequestIndex();
+            updateIoCompletion(blockRequestIndex, backingIo);
+            backingStore_.markCompleted(index);
+        }
+    }
+
+        void updateIoCompletion(uint64_t blockRequestIndex, BackingIo backingIo) {
+            std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+            uint64_t blockRequestStartBlock = pendingBlockReqVec_.at(blockRequestIndex).getStartBlock();
+            uint64_t threadId = pendingBlockReqVec_.at(blockRequestIndex).getThreadId();
+            uint64_t backingIoOffset = backingIo.getOffset();
+
+            uint64_t backingStoreRequestStartBlock = backingIo.getOffset()/blockSizeByte_;
+            uint64_t backingStoreRequestEndBlock = (backingIo.getOffset() + backingIo.getSize() - 1)/blockSizeByte_;
+            if (pendingBlockReqVec_.at(blockRequestIndex).getWriteFlag()) {
+                if (backingIo.getWriteFlag()) {
+                    pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(1);
+                } else {
+                    if (backingIo.getOffset() < pendingBlockReqVec_.at(blockRequestIndex).getOffset()) {
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0);
+                    } else {
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2);
+                    }
+                }
+            } else {
+                for (uint64_t curBlock = backingStoreRequestStartBlock; curBlock<=backingStoreRequestEndBlock; curBlock++) {
+                    pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(curBlock - blockRequestStartBlock);
+                }
+            }
+            if (pendingBlockReqVec_.at(blockRequestIndex).isComplete()) {
+                statUpdate(blockRequestIndex, threadId);
+                pendingBlockReqVec_.at(blockRequestIndex).reset();
+                pendingBlockReqCount_--;
+            }
+        }
+
+    void processBlockStorageRequestThread() {
+        while ((!isReplayDone()) || pendingBlockReqCount_ > 0) {
+
+            uint64_t pendingBlockRequestIndex = popFromQueue();
+            if (pendingBlockRequestIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
+                continue;
+
+            std::vector<bool> blockCompletionVec = processBlockRequest(pendingBlockRequestIndex);
+            uint64_t threadId;
+            uint64_t offset;
+            uint64_t size;
+            bool writeFlag; 
+            {
+                std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+                threadId = pendingBlockReqVec_.at(pendingBlockRequestIndex).getThreadId();
+                offset = pendingBlockReqVec_.at(pendingBlockRequestIndex).getOffset();
+                size = pendingBlockReqVec_.at(pendingBlockRequestIndex).getSize();
+                writeFlag = pendingBlockReqVec_.at(pendingBlockRequestIndex).getWriteFlag();
+                std::cout << folly::sformat("{},{},{}\n", threadId, offset, size);
+            }
+            submitToBackingStore(pendingBlockRequestIndex, threadId, offset, size, writeFlag, blockCompletionVec);
+        }
+    }
+
+    void submitToBackingStore(uint64_t pendingBlockRequestIndex, 
+                                uint64_t threadId, 
+                                uint64_t offset, 
+                                uint64_t size, 
+                                uint64_t writeFlag,
+                                std::vector<bool> blockCompletionVec) {
+        
+        uint64_t missStartBlock;
+        uint64_t numMissBlock = 0;
+
+        uint64_t startBlock = offset/blockSizeByte_;
+        uint64_t endBlock = (offset + size - 1)/blockSizeByte_;
+
+        if (writeFlag) {
+            uint64_t frontAlignmentByte = offset - (startBlock * blockSizeByte_);
+            uint64_t rearAlignmentByte = ((endBlock+1) * blockSizeByte_) - (offset + size);
+
+            // there is misalignment in the front and a miss, so submit a backing read 
+            if ((frontAlignmentByte > 0) & (!blockCompletionVec.at(0))) 
+                backingStore_.submitBackingStoreRequest(startBlock*blockSizeByte_, 
+                                                            frontAlignmentByte, 
+                                                            false, 
+                                                            pendingBlockRequestIndex, 
+                                                            threadId);
+
+            // submit write request 
+            backingStore_.submitBackingStoreRequest(offset, 
+                                                        size, 
+                                                        true, 
+                                                        pendingBlockRequestIndex, 
+                                                        threadId);
+
+            // there is misalignment in the rear and a miss, so submit a backing read 
+            if ((rearAlignmentByte > 0) & (!blockCompletionVec.at(2))) 
+                backingStore_.submitBackingStoreRequest(offset + size, 
+                                                            rearAlignmentByte, 
+                                                            false, 
+                                                            pendingBlockRequestIndex, 
+                                                            threadId);
+        } else {
+            // go through each block touched by the block request 
+            for (uint64_t curBlock = startBlock; curBlock <= endBlock; curBlock++) {
+                if (blockCompletionVec.at(curBlock-startBlock)) {
+                    // hit 
+                    if (numMissBlock > 0) {
+                        backingStore_.submitBackingStoreRequest(missStartBlock*blockSizeByte_, 
+                                                                    numMissBlock*blockSizeByte_, 
+                                                                    false, 
+                                                                    pendingBlockRequestIndex, 
+                                                                    threadId);
+                        numMissBlock = 0;
+                    }
+                } else {
+                    // miss 
+                    if (numMissBlock == 0) 
+                        missStartBlock = curBlock;
+                    numMissBlock++;
+                }
+            }
+            if (numMissBlock > 0) 
+                backingStore_.submitBackingStoreRequest(missStartBlock*blockSizeByte_, 
+                                                            numMissBlock*blockSizeByte_, 
+                                                            false, 
+                                                            pendingBlockRequestIndex, 
+                                                            threadId);
+        }
+    }
+
+    std::vector<bool> processBlockRequest(int64_t index) {
+        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+        if (pendingBlockReqVec_.at(index).getWriteFlag()){
+            return processBlockRequestSystemWrite(index);
+        } else {
+            return processBlockRequestSystemRead(index);
+        }
+    }
+
+    std::vector<bool> processBlockRequestSystemRead(uint64_t pendingBlockRequestIndex) {
+        BlockRequest pendingBlockRequest = pendingBlockReqVec_.at(pendingBlockRequestIndex);
+
+        uint64_t size = pendingBlockRequest.getSize();
+        uint64_t threadId = pendingBlockRequest.getThreadId();
+        uint64_t startBlock = pendingBlockRequest.getStartBlock();
+        uint64_t endBlock = pendingBlockRequest.getEndBlock();
+        uint64_t blockRequestIndex = pendingBlockRequest.getBlockRequestIndex();
+        bool writeFlag = pendingBlockRequest.getWriteFlag();
+
+        uint64_t missStartBlock;
+        uint64_t missPageCount = 0;
+        for (int curBlock = startBlock; curBlock<=endBlock; curBlock++) {
+            if (blockInCache(curBlock, threadId)) {
+                pendingBlockRequest.setCacheHit(curBlock - startBlock);
+            }
+        }
+
+        if (pendingBlockReqVec_.at(blockRequestIndex).isComplete()) {
+            statUpdate(blockRequestIndex, threadId);
+            pendingBlockReqVec_.at(blockRequestIndex).reset();
+            pendingBlockReqCount_--;
+        }
+
+        return pendingBlockReqVec_.at(blockRequestIndex).getBlockIoCompletionVec();
+    }
+
+    std::vector<bool> processBlockRequestSystemWrite(uint64_t pendingBlockRequestIndex) {
+        BlockRequest pendingBlockRequest = pendingBlockReqVec_.at(pendingBlockRequestIndex);
+
+        uint64_t lba = pendingBlockRequest.getLba();
+        uint64_t offset = pendingBlockRequest.getOffset();
+        uint64_t size = pendingBlockRequest.getSize();
+        uint64_t threadId = pendingBlockRequest.getThreadId();
+        uint64_t startBlock = pendingBlockRequest.getStartBlock();
+        uint64_t endBlock = pendingBlockRequest.getEndBlock();
+        uint64_t blockRequestIndex = pendingBlockRequest.getBlockRequestIndex();
+        bool writeFlag = pendingBlockRequest.getWriteFlag();
+
+        uint64_t frontMisalignByte = pendingBlockRequest.getFrontMisAlignByte();
+        uint64_t rearMisalignByte = pendingBlockRequest.getRearMisAlignByte();
+
+        // remove all the stale keys from the cache if they exist 
+        for (int curBlock = startBlock; curBlock<(endBlock + 1); curBlock++) {
+            const std::string key = std::to_string(curBlock);
+            cache_->remove(key);
+        }
+
+        if (frontMisalignByte > 0) {
+            if (blockInCache(startBlock, threadId))
+                pendingBlockRequest.setCacheHit(0);
+        }
+
+        if (rearMisalignByte > 0) {
+            if (blockInCache(endBlock, threadId))
+                pendingBlockRequest.setCacheHit(2);
+        }
+
+        return pendingBlockReqVec_.at(blockRequestIndex).getBlockIoCompletionVec();
     }
 
     // Load a request from trace with the given attribute to the list of pending block requests 
@@ -276,7 +563,14 @@ class BlockStorageStressor : public BlockSystemStressor {
     // Submit a request from the trace to the block storage system. 
     //
     // @param req   Request from block storage trace 
-    void submitToBlockStorageSystem(const Request& req, uint64_t threadId) {
+   SystemTimepoint submitToBlockStorageSystem(const Request& req,    
+                                                uint64_t threadId,
+                                                BlockReplayStats& stats,
+                                                uint64_t traceTimeElapsedUs,
+                                                uint64_t prevTraceTimeElapsedUs, 
+                                                SystemTimepoint prevSubmitTimepoint,
+                                                uint64_t reqCount) {
+
         uint64_t ts = req.timestamp;
         uint64_t lba = std::stoull(req.key);
         uint64_t size = *(req.sizeBegin);
@@ -285,22 +579,19 @@ class BlockStorageStressor : public BlockSystemStressor {
         if (req.getOp() == OpType::kGet)
             writeFlag = false;
         
-        std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
-        while (blockRequestQueue_.size() > config_.blockReplayConfig.maxPendingBlockRequestCount) {
-        }
-
-        BlockRequest blockReq = BlockRequest(lbaSizeByte_, blockSizeByte_);
-        blockReq.load(ts, lba, size, writeFlag, 0, threadId);
-        blockRequestQueue_.push(blockReq);
+        if (reqCount > 1) 
+            replayTimer(stats, traceTimeElapsedUs, prevTraceTimeElapsedUs, prevSubmitTimepoint);
         
-        // uint64_t submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
-        // while (submitIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
-        //     submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
+        SystemTimepoint submitTimepoint = std::chrono::system_clock::now();
+        uint64_t submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
+        while (submitIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
+            submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
         
-        // addToQueue(submitIndex);
-        //return submitIndex;
+        addToQueue(submitIndex);
+        return submitTimepoint;
     }
 
+    // time the replay according to the trace timestamps 
     void replayTimer(BlockReplayStats& stats, 
                         uint64_t traceTimeElapsedUs, 
                         uint64_t prevTraceTimeElapsedUs, 
@@ -312,31 +603,25 @@ class BlockStorageStressor : public BlockSystemStressor {
         uint64_t physicalIatUs = std::chrono::duration_cast<std::chrono::microseconds>(
                                     std::chrono::system_clock::now() - previousSubmitTimepoint).count();
         
-        if (config_.blockReplayConfig.globalClock) {
-            // try to sync the timestamp of replay 
-            int64_t sleepTimeNs = traceTimeElapsedNs - replayTimeElapsedNs;
-            if (sleepTimeNs > 0){
-                std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
-            } else {
-                stats.physicalClockAheadCount++;
-            }
-        } else {
-            // try to sync the inter arrival time of individual request 
-            int64_t sleepTimeNs = (traceIatUs - physicalIatUs) * 1000;
-            if (sleepTimeNs > 0){
-                std::this_thread::sleep_for(std::chrono::microseconds(sleepTimeNs));
-            } else {
-                stats.physicalClockAheadCount++;
-            }
-        }
+        int sleepTimeNs;
+        if (config_.blockReplayConfig.globalClock) 
+            sleepTimeNs = traceTimeElapsedNs - replayTimeElapsedNs;
+        else 
+            sleepTimeNs = (traceIatUs - physicalIatUs)*1000;
+        
+        if (sleepTimeNs > 0)
+            std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
+        else 
+            stats.physicalClockAheadCount++;
+        
         int64_t timeDiffNs = traceTimeElapsedNs - getTestDurationNs();
         uint64_t physicalClockError = (100*abs(timeDiffNs))/traceTimeElapsedNs;
-        stats.physicalClockPercentErrorPercentile->trackValue(physicalClockError);
-
         physicalIatUs = std::chrono::duration_cast<std::chrono::microseconds>(
                                             std::chrono::system_clock::now() - previousSubmitTimepoint).count();
+
         stats.physicalIatUsPercentile->trackValue(physicalIatUs);
         stats.traceIatUsPercentile->trackValue(traceIatUs);
+        stats.physicalClockPercentErrorPercentile->trackValue(physicalClockError);
     }
 
     // Replays a block trace on a Cachelib cache and files in backing store. 
@@ -347,7 +632,7 @@ class BlockStorageStressor : public BlockSystemStressor {
         try {
             uint64_t prevTs;
             uint64_t reqCount = 0;
-            SystemTimepoint previousSubmitTimepoint;
+            SystemTimepoint prevSubmitTimepoint;
             
             std::mt19937_64 gen(folly::Random::rand64());
             std::optional<uint64_t> lastRequestId = std::nullopt;
@@ -356,11 +641,7 @@ class BlockStorageStressor : public BlockSystemStressor {
             while (true) {
                 reqCount++;
                 uint64_t ts = req.timestamp; 
-                if (reqCount > 1) {
-                    replayTimer(stats, ts - startTs, prevTs - startTs, previousSubmitTimepoint);
-                }
-                previousSubmitTimepoint = std::chrono::system_clock::now();
-                submitToBlockStorageSystem(req, threadId);
+                prevSubmitTimepoint = submitToBlockStorageSystem(req, threadId, stats, ts-startTs, prevTs-startTs, prevSubmitTimepoint, reqCount);
                 prevTs = ts; 
                 const Request& req(wg_->getReq(threadId, gen, lastRequestId));
             }
@@ -417,7 +698,9 @@ class BlockStorageStressor : public BlockSystemStressor {
     // FIFO queue of block requests in the system waiting to be processed 
     // processing threads pop this queue to get the request to process once free 
     mutable std::mutex blockRequestQueueMutex_;
-    std::queue<BlockRequest> blockRequestQueue_;
+    std::queue<uint64_t> blockRequestQueue_;
+
+    std::vector<std::mutex> statUpdateLockVec_;
 
 };
 

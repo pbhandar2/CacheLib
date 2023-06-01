@@ -7,11 +7,13 @@
         "name": "block-storage",
         "populateItem": true,
         "generator": "block-replay",
-        "numThreads": 2,
+        "numThreads": 3,
         "blockReplayConfig": {
             "traces": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv",
-                        "/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv"],
-            "backingFiles": ["/users/pbhandar/disk/disk.file", "/users/pbhandar/disk/disk2.file"]
+                        "/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv",
+                        "/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_b.csv"],
+            "backingFiles": ["/users/pbhandar/disk/disk.file", "/users/pbhandar/disk/disk2.file", "/users/pbhandar/disk/disk1.file"],
+            "globalClock": false
         }
     }
 }

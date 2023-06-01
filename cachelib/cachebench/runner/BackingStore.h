@@ -72,7 +72,7 @@ class BackingStore {
                     backingIoVec_(config_.blockReplayConfig.maxPendingBackingStoreIoCount) {
             
             // open each file in the backing storage device 
-            for (uint64_t index=0; index<config_.blockReplayConfig.backingFiles.size(); index++) {
+            for (uint64_t index=0; index<config.blockReplayConfig.backingFiles.size(); index++) {
                 backingFileHandleVec_.push_back(open(config_.blockReplayConfig.backingFiles.at(index).c_str(), O_DIRECT|O_RDWR, 0644));
             }
 

@@ -18,6 +18,7 @@ class BlockSystemRunner {
     private:
         // instance of the stressor.
         std::unique_ptr<BlockSystemStressor> stressor_;
+        StressorConfig stressorConfig_;
 };
 
 }

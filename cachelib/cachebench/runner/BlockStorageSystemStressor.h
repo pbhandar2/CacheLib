@@ -202,8 +202,8 @@ class BlockStorageSystemStressor : public Stressor {
 
             // setup the cache 
             cache_ = std::make_unique<CacheT>(cacheConfig);
-            for (uint64_t index=0; index<config_.blockReplayConfig.maxPendingBlockRequestCount; index++)
-                pendingBlockRequestVec_.push_back(PendingBlockRequest(config_.blockReplayConfig.lbaSizeByte, config_.blockReplayConfig.blockSizeByte));
+            for (uint64_t index=0; index<config.blockReplayConfig.maxPendingBlockRequestCount; index++)
+                pendingBlockRequestVec_.push_back(PendingBlockRequest(config.blockReplayConfig.lbaSizeByte, config.blockReplayConfig.blockSizeByte));
         }
 
         ~BlockStorageSystemStressor() override { 
