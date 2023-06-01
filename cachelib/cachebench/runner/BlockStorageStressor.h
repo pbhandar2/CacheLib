@@ -179,6 +179,7 @@ template <typename Allocator>
 class BlockStorageStressor : public BlockSystemStressor {
 	public:
 		using CacheT = Cache<Allocator>;
+        using SystemTimepoint = std::chrono::time_point<std::chrono::system_clock>;
 
         // @param cacheConfig   the config to instantiate the cache instance
         // @param config        stress test config
@@ -193,7 +194,8 @@ class BlockStorageStressor : public BlockSystemStressor {
                                     hardcodedString_(genHardcodedString()),
                                     stressorTerminateFlag_(config.numThreads, false),
                                     statsVec_(config.numThreads),
-                                    wg_(std::move(generator)) {
+                                    wg_(std::move(generator)),
+                                    endTime_{std::chrono::system_clock::time_point::max()} {
             // setup the cache 
             cache_ = std::make_unique<CacheT>(cacheConfig);
             for (uint64_t index=0; index<config_.blockReplayConfig.maxPendingBlockRequestCount; index++)
@@ -205,15 +207,23 @@ class BlockStorageStressor : public BlockSystemStressor {
         }
 
         void start() override {
+            {
+                std::lock_guard<std::mutex> l(timeMutex_);
+                startTime_ = std::chrono::system_clock::now();
+            }
             threads_ = std::thread([this] {
                 std::vector<std::thread> workers;
                 for (uint64_t i = 0; i < config_.numThreads; ++i) {
-                    workers.push_back(std::thread([this, index=i]() {
-                        stressByBlockReplay(index);
+                    workers.push_back(std::thread([this, stats=&statsVec_.at(i), index=i]() {
+                        stressByBlockReplay(*stats, index);
                     }));
                 }
                 for (auto& worker : workers) {
                     worker.join();
+                }
+                {
+                    std::lock_guard<std::mutex> l(timeMutex_);
+                    endTime_ = std::chrono::system_clock::now();
                 }
             });
         }
@@ -231,23 +241,19 @@ class BlockStorageStressor : public BlockSystemStressor {
             return statsVec_.at(threadId);
         }
 
-        
-    static std::string genHardcodedString() {
-        const std::string s = "The quick brown fox jumps over the lazy dog. ";
-        std::string val;
-        for (int i = 0; i < 4 * 1024 * 1024; i += s.size()) {
-            val += s;
+        uint64_t getTestDurationNs() const override {
+            std::lock_guard<std::mutex> l(timeMutex_);
+            return std::chrono::nanoseconds{std::min(std::chrono::system_clock::now(), endTime_) - startTime_}
+                    .count();
         }
-        return val;
-    }
 
     bool isReplayDone() {
         return std::all_of(stressorTerminateFlag_.begin(), stressorTerminateFlag_.end(), [](bool b){ return b; });
     }
 
     void addToQueue(uint64_t index) {
-        std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
-        blockRequestQueue_.push(index);
+        // std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
+        // blockRequestQueue_.push(index);
     }
 
     // Load a request from trace with the given attribute to the list of pending block requests 
@@ -270,7 +276,7 @@ class BlockStorageStressor : public BlockSystemStressor {
     // Submit a request from the trace to the block storage system. 
     //
     // @param req   Request from block storage trace 
-    uint64_t submitToBlockStorageSystem(const Request& req, uint64_t threadId) {
+    void submitToBlockStorageSystem(const Request& req, uint64_t threadId) {
         uint64_t ts = req.timestamp;
         uint64_t lba = std::stoull(req.key);
         uint64_t size = *(req.sizeBegin);
@@ -279,45 +285,97 @@ class BlockStorageStressor : public BlockSystemStressor {
         if (req.getOp() == OpType::kGet)
             writeFlag = false;
         
-        uint64_t submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
-        while (submitIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
-            submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
+        std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
+        while (blockRequestQueue_.size() > config_.blockReplayConfig.maxPendingBlockRequestCount) {
+        }
+
+        BlockRequest blockReq = BlockRequest(lbaSizeByte_, blockSizeByte_);
+        blockReq.load(ts, lba, size, writeFlag, 0, threadId);
+        blockRequestQueue_.push(blockReq);
         
-        addToQueue(submitIndex);
-        return submitIndex;
+        // uint64_t submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
+        // while (submitIndex == config_.blockReplayConfig.maxPendingBlockRequestCount)
+        //     submitIndex = addToPendingBlockRequestVec(ts, lba, size, writeFlag, threadId);
+        
+        // addToQueue(submitIndex);
+        //return submitIndex;
     }
 
-    void replayTimer(uint64_t traceTs) {
-        uint64_t currentTime;
+    void replayTimer(BlockReplayStats& stats, 
+                        uint64_t traceTimeElapsedUs, 
+                        uint64_t prevTraceTimeElapsedUs, 
+                        SystemTimepoint previousSubmitTimepoint) {
+
+        uint64_t replayTimeElapsedNs = getTestDurationNs();
+        uint64_t traceTimeElapsedNs = traceTimeElapsedUs * 1000;
+        uint64_t traceIatUs = traceTimeElapsedUs - prevTraceTimeElapsedUs;
+        uint64_t physicalIatUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                                    std::chrono::system_clock::now() - previousSubmitTimepoint).count();
+        
+        if (config_.blockReplayConfig.globalClock) {
+            // try to sync the timestamp of replay 
+            int64_t sleepTimeNs = traceTimeElapsedNs - replayTimeElapsedNs;
+            if (sleepTimeNs > 0){
+                std::this_thread::sleep_for(std::chrono::nanoseconds(sleepTimeNs));
+            } else {
+                stats.physicalClockAheadCount++;
+            }
+        } else {
+            // try to sync the inter arrival time of individual request 
+            int64_t sleepTimeNs = (traceIatUs - physicalIatUs) * 1000;
+            if (sleepTimeNs > 0){
+                std::this_thread::sleep_for(std::chrono::microseconds(sleepTimeNs));
+            } else {
+                stats.physicalClockAheadCount++;
+            }
+        }
+        int64_t timeDiffNs = traceTimeElapsedNs - getTestDurationNs();
+        uint64_t physicalClockError = (100*abs(timeDiffNs))/traceTimeElapsedNs;
+        stats.physicalClockErrorPercentile->trackValue(physicalClockError);
     }
 
     // Replays a block trace on a Cachelib cache and files in backing store. 
     //
     // @param stats       Block replay stats 
     // @param fileIndex   The index used to map to resources of the file being replayed 
-    void stressByBlockReplay(uint64_t threadId) {
-        // get the request from the block trace  
-        std::mt19937_64 gen(folly::Random::rand64());
-        std::optional<uint64_t> lastRequestId = std::nullopt;
-        const Request& req(wg_->getReq(threadId, gen, lastRequestId));
-        do {
-            try {
+    void stressByBlockReplay(BlockReplayStats& stats, uint64_t threadId) {
+        try {
+            uint64_t prevTs;
+            uint64_t reqCount = 0;
+            SystemTimepoint previousSubmitTimepoint;
+            
+            std::mt19937_64 gen(folly::Random::rand64());
+            std::optional<uint64_t> lastRequestId = std::nullopt;
+            const Request& req(wg_->getReq(threadId, gen, lastRequestId));
+            uint64_t startTs = req.timestamp;
+            while (true) {
+                reqCount++;
                 uint64_t ts = req.timestamp; 
-                replayTimer(ts);
-
-                // track IAT and time sync
-                uint64_t submitIndex = submitToBlockStorageSystem(req, threadId);
+                if (reqCount > 1) {
+                    replayTimer(stats, ts - startTs, prevTs, previousSubmitTimepoint);
+                }
+                previousSubmitTimepoint = std::chrono::system_clock::now();
+                submitToBlockStorageSystem(req, threadId);
+                prevTs = ts; 
                 const Request& req(wg_->getReq(threadId, gen, lastRequestId));
-            } catch (const cachebench::EndOfTrace& ex) {
-                break;
             }
-        } while (true);
-
+        } catch (const cachebench::EndOfTrace& ex) {
+        }
+        
         wg_->markFinish();
         stressorTerminateFlag_.at(threadId) = true;
         // notify backing store if all replay threads are done 
         if (isReplayDone()) 
             backingStore_.setReplayDone();
+    }
+
+    static std::string genHardcodedString() {
+        const std::string s = "The quick brown fox jumps over the lazy dog. ";
+        std::string val;
+        for (int i = 0; i < 4 * 1024 * 1024; i += s.size()) {
+            val += s;
+        }
+        return val;
     }
 
     // worker threads doing replay, block request processing, async IO return processing, stat printing
@@ -331,6 +389,11 @@ class BlockStorageStressor : public BlockSystemStressor {
 
     // flag indicating whether each replay thread has terminated 
     std::vector<bool>stressorTerminateFlag_;
+
+    // tracking time elapsed at any point in time during runtime 
+    mutable std::mutex timeMutex_;
+    std::chrono::time_point<std::chrono::system_clock> startTime_;
+    std::chrono::time_point<std::chrono::system_clock> endTime_;
 
     // vector of pending block requests in the system 
     // adjust maxPendingBlockRequestCount in config_.blockReplayConfig to adjust the size 
@@ -348,7 +411,7 @@ class BlockStorageStressor : public BlockSystemStressor {
     // FIFO queue of block requests in the system waiting to be processed 
     // processing threads pop this queue to get the request to process once free 
     mutable std::mutex blockRequestQueueMutex_;
-    std::queue<uint64_t> blockRequestQueue_;
+    std::queue<BlockRequest> blockRequestQueue_;
 
 };
 

@@ -38,9 +38,9 @@ struct BlockReplayStats {
 
   uint64_t physicalClockAheadCount{0};
 
-  util::PercentileStats *physicalClockErrorPercentile_ = new util::PercentileStats();
-  util::PercentileStats *physicalIatPercentile_ = new util::PercentileStats();
-  util::PercentileStats *iatErrorPercentile_ = new util::PercentileStats();
+  util::PercentileStats *physicalClockErrorPercentile = new util::PercentileStats();
+  util::PercentileStats *physicalIatPercentile = new util::PercentileStats();
+  util::PercentileStats *iatErrorPercentile = new util::PercentileStats();
 
 };
 
@@ -95,6 +95,10 @@ class BlockSystemStressor {
 
   // report the stats from the cache  while the stress test is being run.
   virtual BlockReplayStats getReplayStats(uint64_t threadId) const = 0;
+
+  // get the duration the test has run so far. If the test is finished, this
+  // is not expected to change.
+  virtual uint64_t getTestDurationNs() const = 0;
 
   // Called when stop request from user is captured. instead of stop the load
   // test immediately, the method sets the state "stopped_" to true. Actual
