@@ -22,6 +22,9 @@ bool BlockSystemRunner::run() {
         stats.render(std::cout, "\n");
     }
 
+    auto cacheStats = stressor_->getCacheStats();
+    cacheStats.renderBlockReplay(std::cout, "\n");
+
     return true; 
 }
 

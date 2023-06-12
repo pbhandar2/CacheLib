@@ -169,17 +169,17 @@ class BackingStore {
             completedIoIndexQueue_.push(index);
         }
 
+
         void trackCompletedIo() {
             struct io_event* events = new io_event[maxPendingBackingStoreIoCount_];
             struct timespec timeout;
             timeout.tv_sec = 0;
             timeout.tv_nsec = 100; // 1ns
             while ((!replayDone_) || (pendingIoCount_ > 0)) {
-                // std::cout << folly::sformat("Backing pending: {}\n", pendingIoCount_);
                 int ret = io_getevents(*ctx_, 1, maxPendingBackingStoreIoCount_, events, &timeout);
                 if (ret <= 0)
                     continue;
-                
+
                 for (int eindex=0; eindex<ret; eindex++) {
                     iocb *retiocb = events[eindex].obj;
 
@@ -201,6 +201,7 @@ class BackingStore {
                         if (itr != iocbToBackingIoIndexMap_.end()) {  
                             backingIoIndex = itr->second;
                             iocbToBackingIoIndexMap_.erase(itr);
+                            // std::cout << folly::sformat("Async IO return for block {} \n", backingIoIndex);
                         } else 
                             throw std::runtime_error(folly::sformat("No mapping to index found for the IOCB pointer: {} \n", retiocb));
                     }
@@ -212,6 +213,7 @@ class BackingStore {
                 }
             }
         }
+
 
         uint64_t submitToBackingStore(uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
             uint64_t submitIndex = maxPendingBackingStoreIoCount_;

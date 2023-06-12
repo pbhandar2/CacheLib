@@ -15,11 +15,10 @@
  */
 
 #include "cachelib/cachebench/runner/Stressor.h"
-#include "cachelib/cachebench/runner/BlockStorageStressor.h"
-
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
 #include "cachelib/cachebench/runner/BlockStorageSystemStressor.h"
+#include "cachelib/cachebench/runner/BatchBlockStressor.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
@@ -37,16 +36,34 @@ namespace cachebench {
 
 
 void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) const {
+  auto getPercent = [](uint64_t count, uint64_t total) {
+    return (total==0) ? 0.0 : static_cast<double>((100*count))/static_cast<double>(total);
+  };
+
+  out << folly::sformat("timeElapsed_sec={}{}", replayTimeNs/1e9, delimiter);
+  // block request count 
   out << folly::sformat("blockReqCount={}{}", blockReqCount, delimiter);
   out << folly::sformat("readBlockReqCount={}{}", readBlockReqCount, delimiter);
   out << folly::sformat("writeBlockReqCount={}{}", writeBlockReqCount, delimiter);
+  // block request byte 
+  out << folly::sformat("totalBlockReqByte={}{}", readBlockReqByte+writeBlockReqByte, delimiter);
   out << folly::sformat("readBlockReqByte={}{}", readBlockReqByte, delimiter);
   out << folly::sformat("writeBlockReqByte={}{}", writeBlockReqByte, delimiter);
+  // misliagnment bytes 
+  out << folly::sformat("readMisalignByte={}{}", readMisalignByte, delimiter);
+  out << folly::sformat("writeMisalignByte={}{}", writeMisalignByte, delimiter);
 
-  out << folly::sformat("physicalClockAheadCount={}{}", physicalClockAheadCount, delimiter);
-  renderPercentile(out, "physicalClockError", "%", delimiter, physicalClockPercentErrorPercentile);
-  renderPercentile(out, "physicalIat", "us", delimiter, physicalIatUsPercentile);
-  renderPercentile(out, "traceIat", "us", delimiter, traceIatUsPercentile);
+  out << folly::sformat("readHitByte={}{}", readHitByte, delimiter);
+  out << folly::sformat("readByteHitRate={:.5f}{}", getPercent(readHitByte, readBlockReqByte+writeMisalignByte), delimiter);
+  
+  out << folly::sformat("readCacheReqCount={}{}", readCacheReqCount, delimiter);
+  out << folly::sformat("readCacheHitCount={}{}", readHitCount, delimiter);
+  out << folly::sformat("readCacheHitRate={:.5f}{}", getPercent(readHitCount, readCacheReqCount), delimiter);
+
+  renderPercentile(out, "physicalIat", "ns", delimiter, physicalIatNsPercentile);
+  renderPercentile(out, "blockReadLatency", "ns", delimiter, readLatencyNsPercentile);
+  renderPercentile(out, "blockWriteLatency", "ns", delimiter, writeLatencyNsPercentile);
+
 }
 
 
@@ -270,10 +287,10 @@ std::unique_ptr<BlockSystemStressor> BlockSystemStressor::makeBlockSystemStresso
   auto generator = makeGenerator(stressorConfig);
   if (cacheConfig.allocator == "LRU") {
     // default allocator is LRU, other allocator types should be added here
-    return std::make_unique<BlockStorageStressor<LruAllocator>>(
+    return std::make_unique<BatchBlockStressor<LruAllocator>>(
         cacheConfig, stressorConfig, std::move(generator));
   } else if (cacheConfig.allocator == "LRU2Q") {
-    return std::make_unique<BlockStorageStressor<Lru2QAllocator>>(
+    return std::make_unique<BatchBlockStressor<Lru2QAllocator>>(
         cacheConfig, stressorConfig, std::move(generator));
   } else {
     throw std::runtime_error("Allocator can be LRU or LRU2Q \n");

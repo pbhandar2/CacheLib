@@ -53,7 +53,7 @@ struct BlockReplayConfig : public JSONConfig {
   // the timestamps are divided by the replayRate to replay an accelerated workload 
   uint32_t replayRate{1};
 
-  uint32_t minSleepTimeNs{5000};
+  uint32_t minSleepTimeUs{10};
 
   // whether to sync the replay time with timestamps on the trace 
   // when TRUE:
@@ -68,6 +68,8 @@ struct BlockReplayConfig : public JSONConfig {
   // if 0: follow trace timestamps 
   // if N: where N>0 wait for min(N, inter-arrival time)
   int32_t idleWaitTimeUs{0};
+
+  uint64_t batchSubmitIntervalUs{1000};
 };
 
 struct DistributionConfig : public JSONConfig {

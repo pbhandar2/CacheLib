@@ -36,12 +36,17 @@ struct BlockReplayStats {
   uint64_t readBlockReqByte{0};
   uint64_t writeBlockReqByte{0};
 
-  uint64_t physicalClockAheadCount{0};
+  uint64_t readHitByte{0};
+  uint64_t readMisalignByte{0};
+  uint64_t writeMisalignByte{0};
+  uint64_t readCacheReqCount{0};
+  uint64_t readHitCount{0};
+
   uint64_t replayTimeNs{0};
 
-  util::PercentileStats *physicalClockPercentErrorPercentile = new util::PercentileStats();
-  util::PercentileStats *physicalIatUsPercentile = new util::PercentileStats();
-  util::PercentileStats *traceIatUsPercentile = new util::PercentileStats();
+  util::PercentileStats *readLatencyNsPercentile = new util::PercentileStats();
+  util::PercentileStats *writeLatencyNsPercentile = new util::PercentileStats();
+  util::PercentileStats *physicalIatNsPercentile = new util::PercentileStats();
 
   void render(std::ostream& out, folly::StringPiece delimiter) const;
   void renderPercentile(std::ostream& out, 
@@ -95,6 +100,8 @@ class BlockSystemStressor {
 
   virtual ~BlockSystemStressor() {}
 
+  virtual Stats getCacheStats() const = 0;
+
   // start the stress run.
   virtual void start() = 0;
 
@@ -102,13 +109,6 @@ class BlockSystemStressor {
   virtual void finish() = 0;
 
   virtual BlockReplayStats getStat(uint64_t threadId) const = 0;
-
-  // report the stats from the cache  while the stress test is being run.
-  // virtual BlockReplayStats getReplayStats() const = 0;
-
-  // get the duration the test has run so far. If the test is finished, this
-  // is not expected to change.
-  virtual uint64_t getTestDurationNs() const = 0;
 
   // Called when stop request from user is captured. instead of stop the load
   // test immediately, the method sets the state "stopped_" to true. Actual
