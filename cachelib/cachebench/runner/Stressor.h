@@ -42,11 +42,32 @@ struct BlockReplayStats {
   uint64_t readCacheReqCount{0};
   uint64_t readHitCount{0};
 
+  uint64_t backingReqCount{0};
+  uint64_t readBackingReqCount{0};
+  uint64_t writeBackingReqCount{0};
+  uint64_t backingReqByte{0};
+  uint64_t readBackingReqByte{0};
+  uint64_t writeBackingReqByte{0};
+
   uint64_t replayTimeNs{0};
+  uint64_t timeElapsedNs{0};
+
+  uint64_t blockReqAddAttempt{0};
+  uint64_t blockReqAddFailure{0};
+
+  uint64_t backingReqAddAttempt{0};
+  uint64_t backingReqAddFailure{0};
+
+  util::PercentileStats *backingReadSizeBytePercentile = new util::PercentileStats();
+  util::PercentileStats *backingWriteSizeBytePercentile = new util::PercentileStats();
+
+  util::PercentileStats *backingReadLatencyNsPercentile = new util::PercentileStats();
+  util::PercentileStats *backingWriteLatencyNsPercentile = new util::PercentileStats();
 
   util::PercentileStats *readLatencyNsPercentile = new util::PercentileStats();
   util::PercentileStats *writeLatencyNsPercentile = new util::PercentileStats();
   util::PercentileStats *physicalIatNsPercentile = new util::PercentileStats();
+
 
   void render(std::ostream& out, folly::StringPiece delimiter) const;
   void renderPercentile(std::ostream& out, 
@@ -102,11 +123,16 @@ class BlockSystemStressor {
 
   virtual Stats getCacheStats() const = 0;
 
+  virtual util::PercentileStats* getQueueSizePercentile() const = 0;
+  virtual util::PercentileStats* getPendingBlockReqPercentile() const = 0;
+  
   // start the stress run.
   virtual void start() = 0;
 
   // wait until the stress run finishes
   virtual void finish() = 0;
+
+  virtual void statSnapshot(uint64_t threadId, std::ostream& ofs, std::string separator) = 0;
 
   virtual BlockReplayStats getStat(uint64_t threadId) const = 0;
 

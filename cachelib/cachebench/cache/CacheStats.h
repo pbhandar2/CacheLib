@@ -63,6 +63,11 @@ struct Stats {
   util::PercentileStats::Estimates cacheAllocateLatencyNs;
   util::PercentileStats::Estimates cacheFindLatencyNs;
 
+  double nvmReadLatencyMicrosAvg{0};
+  double nvmReadLatencyMicrosP1{0};
+  double nvmReadLatencyMicrosP5{0};
+  double nvmReadLatencyMicrosP10{0};
+  double nvmReadLatencyMicrosP25{0};
   double nvmReadLatencyMicrosP50{0};
   double nvmReadLatencyMicrosP90{0};
   double nvmReadLatencyMicrosP99{0};
@@ -71,6 +76,12 @@ struct Stats {
   double nvmReadLatencyMicrosP99999{0};
   double nvmReadLatencyMicrosP999999{0};
   double nvmReadLatencyMicrosP100{0};
+
+  double nvmWriteLatencyMicrosAvg{0};
+  double nvmWriteLatencyMicrosP1{0};
+  double nvmWriteLatencyMicrosP5{0};
+  double nvmWriteLatencyMicrosP10{0};
+  double nvmWriteLatencyMicrosP25{0};
   double nvmWriteLatencyMicrosP50{0};
   double nvmWriteLatencyMicrosP90{0};
   double nvmWriteLatencyMicrosP99{0};
@@ -107,6 +118,123 @@ struct Stats {
 
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
+
+  void renderBlockReplay(std::ostream& out, std::string separator) const {
+    const double ramHitRatio = invertPctFn(numCacheGetMiss, numCacheGets) ? numCacheGets > 0 : 0.0;
+    const double nvmHitRatio = invertPctFn(numNvmGetMiss, numNvmGets) ? numNvmGets > 0 : 0.0;
+
+    out << folly::sformat("numItems={}{}", numItems, separator);
+    out << folly::sformat("numNvmItems={}{}", numNvmItems, separator);
+    out << folly::sformat("allocAttempts={}{}", allocAttempts, separator);
+    out << folly::sformat("evictAttempts={}{}", evictAttempts, separator);
+    out << folly::sformat("allocSuccess_%={}{}", invertPctFn(allocFailures, allocAttempts), separator);
+    out << folly::sformat("numCacheGets={}{}", numCacheGets, separator);
+    out << folly::sformat("numCacheGetMiss={}{}", numCacheGetMiss, separator);
+    out << folly::sformat("numEvictions={}{}", numEvictions, separator);
+    out << folly::sformat("ramHitRatio_%={:.5f}{}", ramHitRatio, separator);
+    out << folly::sformat("numRamDestructorCalls={}{}", numRamDestructorCalls, separator);
+    renderPercentile(out, "findLatency", "ns", separator, cacheFindLatencyNs);
+    renderPercentile(out, "allocateLatency", "ns", separator, cacheAllocateLatencyNs);
+    out << folly::sformat("numNvmGets={}{}", numNvmGets, separator);
+    out << folly::sformat("numNvmGetCoalesced={}{}", numNvmGetCoalesced, separator);
+    out << folly::sformat("numNvmPuts={}{}", numNvmPuts, separator);
+    out << folly::sformat("numNvmPutErrs={}{}", numNvmPutErrs, separator);
+    out << folly::sformat("numNvmAbortedPutOnTombstone={}{}", numNvmAbortedPutOnTombstone, separator);
+    out << folly::sformat("numNvmAbortedPutOnInflightGet={}{}", numNvmAbortedPutOnInflightGet, separator);
+    out << folly::sformat("numNvmPutFromClean={}{}", numNvmPutFromClean, separator);
+    out << folly::sformat("numNvmUncleanEvict={}{}", numNvmUncleanEvict, separator);
+    out << folly::sformat("numNvmCleanEvict={}{}", numNvmCleanEvict, separator);
+    out << folly::sformat("numNvmCleanDoubleEvict={}{}", numNvmCleanDoubleEvict, separator);
+    out << folly::sformat("numNvmDestructorCalls={}{}", numNvmDestructorCalls, separator);
+    out << folly::sformat("numNvmItemRemovedSetSize={}{}", numNvmItemRemovedSetSize, separator);
+    out << folly::sformat("nvmHitRatio_%={:.5f}{}", nvmHitRatio, separator);
+    out << folly::sformat("numNvmEvictions={}{}", numNvmEvictions, separator);
+    out << folly::sformat("numNvmBytesWritten={}{}", numNvmBytesWritten, separator);
+    out << folly::sformat("numNvmNandBytesWritten={}{}", numNvmNandBytesWritten, separator);
+    out << folly::sformat("numNvmLogicalBytesWritten={}{}", numNvmLogicalBytesWritten, separator);
+    out << folly::sformat("numNvmExceededMaxRetry={}{}", numNvmExceededMaxRetry, separator);
+    out << folly::sformat("numNvmDeletes={}{}", numNvmDeletes, separator);
+    out << folly::sformat("numNvmSkippedDeletes={}{}", numNvmSkippedDeletes, separator);
+    out << folly::sformat("slabsReleased={}{}", slabsReleased, separator);
+    out << folly::sformat("numAbortedSlabReleases={}{}", numAbortedSlabReleases, separator);
+    out << folly::sformat("numReaperSkippedSlabs={}{}", numReaperSkippedSlabs, separator);
+    out << folly::sformat("moveAttemptsForSlabRelease={}{}", moveAttemptsForSlabRelease, separator);
+    out << folly::sformat("moveSuccessesForSlabRelease={}{}", moveSuccessesForSlabRelease, separator);
+    out << folly::sformat("evictionAttemptsForSlabRelease={}{}", evictionAttemptsForSlabRelease, separator);
+    out << folly::sformat("evictionSuccessesForSlabRelease={}{}", evictionSuccessesForSlabRelease, separator);
+    out << folly::sformat("numNvmRejectsByExpiry={}{}", numNvmRejectsByExpiry, separator);
+    out << folly::sformat("numNvmRejectsByExpiry={}{}", numNvmRejectsByClean, separator);
+    out << folly::sformat("inconsistencyCount={}{}", inconsistencyCount, separator);
+    out << folly::sformat("invalidDestructorCount={}{}", invalidDestructorCount, separator);
+    out << folly::sformat("unDestructedItemCount={}{}", unDestructedItemCount, separator);
+
+    folly::StringPiece readCat = "nvmReadLatency";
+    folly::StringPiece writeCat = "nvmWriteLatency";
+    auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct, folly::StringPiece separator,
+                          double val) {
+      out << folly::sformat("{}_{}_us={}{}", cat, pct, val, separator);
+    };
+
+    fmtLatency(readCat, "avg", separator, nvmReadLatencyMicrosAvg);
+    fmtLatency(readCat, "p1", separator, nvmReadLatencyMicrosP1);
+    fmtLatency(readCat, "p5", separator, nvmReadLatencyMicrosP5);
+    fmtLatency(readCat, "p10", separator, nvmReadLatencyMicrosP10);
+    fmtLatency(readCat, "p25", separator, nvmReadLatencyMicrosP25);
+    fmtLatency(readCat, "p50", separator, nvmReadLatencyMicrosP50);
+    fmtLatency(readCat, "p90", separator, nvmReadLatencyMicrosP90);
+    fmtLatency(readCat, "p99", separator, nvmReadLatencyMicrosP99);
+    fmtLatency(readCat, "p999", separator, nvmReadLatencyMicrosP999);
+    fmtLatency(readCat, "p9999", separator, nvmReadLatencyMicrosP9999);
+    fmtLatency(readCat, "p99999", separator, nvmReadLatencyMicrosP99999);
+    fmtLatency(readCat, "p999999", separator, nvmReadLatencyMicrosP999999);
+    fmtLatency(readCat, "p100", separator, nvmReadLatencyMicrosP100);
+
+    fmtLatency(writeCat, "avg", separator, nvmWriteLatencyMicrosAvg);
+    fmtLatency(writeCat, "p1", separator, nvmWriteLatencyMicrosP1);
+    fmtLatency(writeCat, "p5", separator, nvmWriteLatencyMicrosP5);
+    fmtLatency(writeCat, "p10", separator, nvmWriteLatencyMicrosP10);
+    fmtLatency(writeCat, "p25", separator, nvmWriteLatencyMicrosP25);
+    fmtLatency(writeCat, "p50", separator, nvmWriteLatencyMicrosP50);
+    fmtLatency(writeCat, "p90", separator, nvmWriteLatencyMicrosP90);
+    fmtLatency(writeCat, "p99", separator, nvmWriteLatencyMicrosP99);
+    fmtLatency(writeCat, "p999", separator, nvmWriteLatencyMicrosP999);
+    fmtLatency(writeCat, "p9999", separator, nvmWriteLatencyMicrosP9999);
+    fmtLatency(writeCat, "p99999", separator, nvmWriteLatencyMicrosP99999);
+    fmtLatency(writeCat, "p999999", separator, nvmWriteLatencyMicrosP999999);
+    fmtLatency(writeCat, "p100", separator, nvmWriteLatencyMicrosP100);
+  }
+
+  void renderPercentile(std::ostream& out, 
+                          folly::StringPiece describe, 
+                          folly::StringPiece unit, 
+                          folly::StringPiece delimiter, 
+                           util::PercentileStats::Estimates est) const {
+      auto printLatencies =
+          [&out](folly::StringPiece cat, folly::StringPiece unit, folly::StringPiece delimiter,
+                  const util::PercentileStats::Estimates& latency) {
+          auto fmtLatency = [&out, &cat, &unit, &delimiter](folly::StringPiece pct, uint64_t val) {
+              out << folly::sformat("{}_{}_{}={}{}", cat, pct, unit, val, delimiter);
+          };
+
+          fmtLatency("avg", latency.avg);
+          fmtLatency("p0", latency.p0);
+          fmtLatency("p5", latency.p5);
+          fmtLatency("p10", latency.p10);
+          fmtLatency("p25", latency.p25);
+          fmtLatency("p50", latency.p50);
+          fmtLatency("p75", latency.p75);
+          fmtLatency("p90", latency.p90);
+          fmtLatency("p95", latency.p95);
+          fmtLatency("p99", latency.p99);
+          fmtLatency("p999", latency.p999);
+          fmtLatency("p9999", latency.p9999);
+          fmtLatency("p99999", latency.p99999);
+          fmtLatency("p999999", latency.p999999);
+          fmtLatency("p100", latency.p100);
+        };
+
+    printLatencies(describe, unit, delimiter, est);
+  }
 
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
@@ -145,9 +273,15 @@ struct Stats {
                 out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
                                       val);
               };
-
+              fmtLatency("avg", latency.avg);
+              fmtLatency("p0", latency.p0);
+              fmtLatency("p5", latency.p5);
+              fmtLatency("p10", latency.p10);
+              fmtLatency("p25", latency.p25);
               fmtLatency("p50", latency.p50);
+              fmtLatency("p75", latency.p75);
               fmtLatency("p90", latency.p90);
+              fmtLatency("p95", latency.p95);
               fmtLatency("p99", latency.p99);
               fmtLatency("p999", latency.p999);
               fmtLatency("p9999", latency.p9999);
@@ -182,6 +316,11 @@ struct Stats {
         out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
       };
 
+      fmtLatency(readCat, "avg", nvmReadLatencyMicrosAvg);
+      fmtLatency(readCat, "p1", nvmReadLatencyMicrosP1);
+      fmtLatency(readCat, "p5", nvmReadLatencyMicrosP5);
+      fmtLatency(readCat, "p10", nvmReadLatencyMicrosP10);
+      fmtLatency(readCat, "p25", nvmReadLatencyMicrosP25);
       fmtLatency(readCat, "p50", nvmReadLatencyMicrosP50);
       fmtLatency(readCat, "p90", nvmReadLatencyMicrosP90);
       fmtLatency(readCat, "p99", nvmReadLatencyMicrosP99);
@@ -191,6 +330,11 @@ struct Stats {
       fmtLatency(readCat, "p999999", nvmReadLatencyMicrosP999999);
       fmtLatency(readCat, "p100", nvmReadLatencyMicrosP100);
 
+      fmtLatency(writeCat, "avg", nvmWriteLatencyMicrosAvg);
+      fmtLatency(writeCat, "p1", nvmWriteLatencyMicrosP1);
+      fmtLatency(writeCat, "p5", nvmWriteLatencyMicrosP5);
+      fmtLatency(writeCat, "p10", nvmWriteLatencyMicrosP10);
+      fmtLatency(writeCat, "p25", nvmWriteLatencyMicrosP25);
       fmtLatency(writeCat, "p50", nvmWriteLatencyMicrosP50);
       fmtLatency(writeCat, "p90", nvmWriteLatencyMicrosP90);
       fmtLatency(writeCat, "p99", nvmWriteLatencyMicrosP99);

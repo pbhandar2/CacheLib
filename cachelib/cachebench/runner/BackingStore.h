@@ -2,24 +2,20 @@
 
 #include <libaio.h>
 #include "cachelib/cachebench/util/Config.h"
+#include "cachelib/cachebench/runner/tscns.h"
 
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-struct BackingStoreStats {
-    uint64_t readIoCount{0};
-    uint64_t writeIoCount{0};
-    uint64_t readIoByte{0};
-    uint64_t writeIoByte{0};
-};
 
 class BackingIo {
     public:
         BackingIo(){}
 
-        void load(uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
+        void load(uint64_t physicalTs, uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
+            physicalTs_ = physicalTs;
             offset_ = offset;
             size_ = size;
             writeFlag_ = writeFlag;
@@ -39,6 +35,10 @@ class BackingIo {
             return offset_;
         }
 
+        uint64_t getPhysicalTs() {
+            return physicalTs_;
+        }
+        
         bool getWriteFlag() {
             return writeFlag_;
         }
@@ -55,6 +55,7 @@ class BackingIo {
     iocb *iocbPtr_;
     
     private:
+        uint64_t physicalTs_;
         uint64_t offset_;
         uint64_t size_ = 0;
         bool writeFlag_;
@@ -66,7 +67,6 @@ class BackingStore {
     public:
         BackingStore(StressorConfig config)
                 :   config_(config),
-                    statVec_(config_.blockReplayConfig.backingFiles.size()+1),
                     bufferVec_(config_.blockReplayConfig.maxPendingBackingStoreIoCount),
                     maxPendingBackingStoreIoCount_(config_.blockReplayConfig.maxPendingBackingStoreIoCount),
                     backingIoVec_(config_.blockReplayConfig.maxPendingBackingStoreIoCount) {
@@ -101,16 +101,20 @@ class BackingStore {
             }
         }
 
+
+        // map a IOCB pointer to the index of pening backing IO in the system 
         void addToIocbToBackingStoreIndexMap(std::pair<iocb*, uint64_t> pair) {
             std::lock_guard<std::mutex> l(iocbToBackingIoMapMutex_);
             iocbToBackingIoIndexMap_.insert(pair);
         }
 
-        void submitBackingStoreRequest(uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex, uint64_t threadId) {
+
+        // submit a request to backing storage 
+        void submitBackingStoreRequest(uint64_t physicalTs, uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex, uint64_t threadId) {
             std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
-            uint64_t index = submitToBackingStore(offset, size, writeFlag, blockRequestIndex);
+            uint64_t index = submitToBackingStore(physicalTs, offset, size, writeFlag, blockRequestIndex);
             while (index == maxPendingBackingStoreIoCount_)
-                index = submitToBackingStore(offset, size, writeFlag, blockRequestIndex);
+                index = submitToBackingStore(physicalTs, offset, size, writeFlag, blockRequestIndex);
 
             int ret = posix_memalign((void **)&bufferVec_.at(index), config_.blockReplayConfig.lbaSizeByte, size);
             if (ret != 0) 
@@ -136,6 +140,8 @@ class BackingStore {
                 throw std::runtime_error(folly::sformat("Error in function io_submit. Return={}\n", ret));
         }
 
+
+        // pop from the queue of backing IO that have returned but not been processed 
         uint64_t popFromBackingIoReturnQueue() {
             std::lock_guard<std::mutex> l(completedIoMutex_);
             uint64_t index = maxPendingBackingStoreIoCount_;
@@ -146,12 +152,25 @@ class BackingStore {
             return index;
         }
 
+        uint64_t getBackingReqAddAttempt() {
+            std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
+            return backingReqAddAttempt_;
+        }
+
+        uint64_t getBackingReqAddFailure() {
+            std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
+            return backingReqAddFailure_;
+        }
+
+
         // Get the BackingIo at the specified index 
         const BackingIo getBackingIo(uint64_t index) {
             std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
             return backingIoVec_.at(index);
         }
 
+
+        // Mark a backing IO at a certain index as completed and reset the spot for reuse 
         void markCompleted(uint64_t index) {
             std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
             backingIoVec_.at(index).reset();
@@ -159,17 +178,23 @@ class BackingStore {
             pendingIoCount_--;
         }
 
+
+        // Mark block trace replay as being done 
+        // If there is no pending backing IO requests, threads can terminate 
         void setReplayDone() {
             replayDone_ = true;
         }
     
+
     private:
+        // add a index of pending backing requests to queue 
         void addToCompletedIoIndexQueue(uint64_t index) {
             std::lock_guard<std::mutex> l(completedIoMutex_);
             completedIoIndexQueue_.push(index);
         }
 
 
+        // thread to track async backing storage requests that return 
         void trackCompletedIo() {
             struct io_event* events = new io_event[maxPendingBackingStoreIoCount_];
             struct timespec timeout;
@@ -201,7 +226,6 @@ class BackingStore {
                         if (itr != iocbToBackingIoIndexMap_.end()) {  
                             backingIoIndex = itr->second;
                             iocbToBackingIoIndexMap_.erase(itr);
-                            // std::cout << folly::sformat("Async IO return for block {} \n", backingIoIndex);
                         } else 
                             throw std::runtime_error(folly::sformat("No mapping to index found for the IOCB pointer: {} \n", retiocb));
                     }
@@ -215,18 +239,24 @@ class BackingStore {
         }
 
 
-        uint64_t submitToBackingStore(uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
+        // initiate a new backing storage request and add it to vector of pending backing storage request 
+        uint64_t submitToBackingStore(uint64_t physicalTs, uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
             uint64_t submitIndex = maxPendingBackingStoreIoCount_;
             if (BackingIoCount_ < maxPendingBackingStoreIoCount_) {
                 for (int index=0; index<maxPendingBackingStoreIoCount_; index++) {
                     if (!backingIoVec_.at(index).isLoaded()) {
-                        backingIoVec_.at(index).load(offset, size, writeFlag, blockRequestIndex);
+                        backingIoVec_.at(index).load(physicalTs, offset, size, writeFlag, blockRequestIndex);
                         submitIndex = index; 
                         pendingIoCount_++;
                         break;
                     }
                 }
             }
+
+            backingReqAddAttempt_++;
+            if (submitIndex == maxPendingBackingStoreIoCount_)
+                backingReqAddFailure_++;
+            
             return submitIndex;  
         }
 
@@ -237,18 +267,19 @@ class BackingStore {
         uint64_t BackingIoCount_ = 0;
         uint64_t maxPendingBackingStoreIoCount_;
 
+
         // data needed to submit requests to backing store 
         mutable std::mutex pendingBackingIoMutex_;
         std::vector<BackingIo> backingIoVec_;
         std::vector<char*> bufferVec_;
         std::vector<int> backingFileHandleVec_;
+        uint64_t backingReqAddFailure_ = 0;
+        uint64_t backingReqAddAttempt_ = 0;
 
         mutable std::mutex iocbToBackingIoMapMutex_;
         std::map<iocb*, uint64_t> iocbToBackingIoIndexMap_;
 
-        std::vector<BackingStoreStats> statVec_;
         uint64_t pendingIoCount_;
-
         bool replayDone_ = false;
 
         // data to track async IO to backing store that return 

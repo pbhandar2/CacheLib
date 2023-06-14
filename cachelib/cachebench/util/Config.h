@@ -35,6 +35,8 @@ struct BlockReplayConfig : public JSONConfig {
   std::vector<std::uint64_t> minLbaVec{};
   std::vector<std::string> backingFiles{};
 
+  std::string statOutputDir{"/dev/shm"};
+
   uint32_t lbaSizeByte{512};
   uint32_t blockSizeByte{4096};
 
@@ -70,6 +72,8 @@ struct BlockReplayConfig : public JSONConfig {
   int32_t idleWaitTimeUs{0};
 
   uint64_t batchSubmitIntervalUs{1000};
+
+  uint64_t statTrackIntervalSec{30};
 };
 
 struct DistributionConfig : public JSONConfig {

@@ -17,7 +17,6 @@
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
-#include "cachelib/cachebench/runner/BlockStorageSystemStressor.h"
 #include "cachelib/cachebench/runner/BatchBlockStressor.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
@@ -40,7 +39,8 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) c
     return (total==0) ? 0.0 : static_cast<double>((100*count))/static_cast<double>(total);
   };
 
-  out << folly::sformat("timeElapsed_sec={}{}", replayTimeNs/1e9, delimiter);
+  out << folly::sformat("timeElapsed_sec={}{}", timeElapsedNs/1e9, delimiter);
+  out << folly::sformat("replayTime_sec={}{}", replayTimeNs/1e9, delimiter);
   // block request count 
   out << folly::sformat("blockReqCount={}{}", blockReqCount, delimiter);
   out << folly::sformat("readBlockReqCount={}{}", readBlockReqCount, delimiter);
@@ -52,17 +52,37 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) c
   // misliagnment bytes 
   out << folly::sformat("readMisalignByte={}{}", readMisalignByte, delimiter);
   out << folly::sformat("writeMisalignByte={}{}", writeMisalignByte, delimiter);
-
+  // read byte hit rate 
   out << folly::sformat("readHitByte={}{}", readHitByte, delimiter);
   out << folly::sformat("readByteHitRate={:.5f}{}", getPercent(readHitByte, readBlockReqByte+writeMisalignByte), delimiter);
-  
+  // block cache hit rate 
   out << folly::sformat("readCacheReqCount={}{}", readCacheReqCount, delimiter);
   out << folly::sformat("readCacheHitCount={}{}", readHitCount, delimiter);
   out << folly::sformat("readCacheHitRate={:.5f}{}", getPercent(readHitCount, readCacheReqCount), delimiter);
+  // block req add attempt/failure 
+  out << folly::sformat("blockReqAddAttempt={}{}", blockReqAddAttempt, delimiter);
+  out << folly::sformat("blockReqAddFailure={}{}", blockReqAddFailure, delimiter);
 
   renderPercentile(out, "physicalIat", "ns", delimiter, physicalIatNsPercentile);
   renderPercentile(out, "blockReadLatency", "ns", delimiter, readLatencyNsPercentile);
   renderPercentile(out, "blockWriteLatency", "ns", delimiter, writeLatencyNsPercentile);
+
+  // backing stats 
+  out << folly::sformat("backingReqCount={}{}", backingReqCount, delimiter);
+  out << folly::sformat("backingReqByte={}{}", backingReqByte, delimiter);
+  out << folly::sformat("readBackingReqCount={}{}", readBackingReqCount, delimiter);
+  out << folly::sformat("readBackingReqByte={}{}", readBackingReqByte, delimiter);
+  out << folly::sformat("writeBackingReqCount={}{}", writeBackingReqCount, delimiter);
+  out << folly::sformat("writeBackingReqByte={}{}", writeBackingReqByte, delimiter);
+  out << folly::sformat("backingReqAddAttempt={}{}", backingReqAddAttempt, delimiter);
+  out << folly::sformat("backingReqAddFailure={}{}", backingReqAddFailure, delimiter);
+
+  // backing read/write latency 
+  renderPercentile(out, "backingReadLatency", "ns", delimiter, backingReadLatencyNsPercentile);
+  renderPercentile(out, "backingWriteLatency", "ns", delimiter, backingWriteLatencyNsPercentile);
+
+  renderPercentile(out, "backingReadSize", "byte", delimiter, backingReadSizeBytePercentile);
+  renderPercentile(out, "backingWriteSize", "byte", delimiter, backingWriteSizeBytePercentile);
 
 }
 
@@ -247,8 +267,6 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   } else if (stressorConfig.name == "fast_shutdown") {
     return std::make_unique<FastShutdownStressor>(cacheConfig,
                                                   stressorConfig.numOps);
-  } else if (stressorConfig.name == "block-storage") {
-    return std::make_unique<BlockStorageSystemStressor<LruAllocator>>(cacheConfig, stressorConfig, std::move(generator));
   } else if (stressorConfig.name == "async") {
     if (stressorConfig.generator != "workload" &&
         !stressorConfig.generator.empty()) {

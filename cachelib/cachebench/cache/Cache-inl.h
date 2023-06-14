@@ -715,6 +715,12 @@ Stats Cache<Allocator>::getStats() const {
     double bcLogicalBytes = lookup("navy_bc_logical_written");
     ret.numNvmLogicalBytesWritten =
         static_cast<size_t>(bhLogicalBytes + bcLogicalBytes);
+
+    ret.nvmReadLatencyMicrosAvg = lookup("navy_device_read_latency_us_avg");
+    ret.nvmReadLatencyMicrosP1 = lookup("navy_device_read_latency_us_p1");
+    ret.nvmReadLatencyMicrosP5 = lookup("navy_device_read_latency_us_p5");
+    ret.nvmReadLatencyMicrosP10 = lookup("navy_device_read_latency_us_p10");
+    ret.nvmReadLatencyMicrosP25 = lookup("navy_device_read_latency_us_p25");
     ret.nvmReadLatencyMicrosP50 = lookup("navy_device_read_latency_us_p50");
     ret.nvmReadLatencyMicrosP90 = lookup("navy_device_read_latency_us_p90");
     ret.nvmReadLatencyMicrosP99 = lookup("navy_device_read_latency_us_p99");
@@ -725,6 +731,12 @@ Stats Cache<Allocator>::getStats() const {
     ret.nvmReadLatencyMicrosP999999 =
         lookup("navy_device_read_latency_us_p999999");
     ret.nvmReadLatencyMicrosP100 = lookup("navy_device_read_latency_us_p100");
+
+    ret.nvmWriteLatencyMicrosAvg = lookup("navy_device_write_latency_us_avg");
+    ret.nvmWriteLatencyMicrosP1 = lookup("navy_device_write_latency_us_p1");
+    ret.nvmWriteLatencyMicrosP5 = lookup("navy_device_write_latency_us_p5");
+    ret.nvmWriteLatencyMicrosP10 = lookup("navy_device_write_latency_us_p10");
+    ret.nvmWriteLatencyMicrosP25 = lookup("navy_device_write_latency_us_p25");
     ret.nvmWriteLatencyMicrosP50 = lookup("navy_device_write_latency_us_p50");
     ret.nvmWriteLatencyMicrosP90 = lookup("navy_device_write_latency_us_p90");
     ret.nvmWriteLatencyMicrosP99 = lookup("navy_device_write_latency_us_p99");

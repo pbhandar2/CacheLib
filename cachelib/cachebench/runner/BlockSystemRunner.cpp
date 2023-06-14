@@ -13,17 +13,18 @@ BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config)
 }
 
 bool BlockSystemRunner::run() {
+
     stressor_->start();
     stressor_->finish();
 
+    BlockReplayStats stats;
     uint64_t numThreads = stressorConfig_.numThreads;
-    for (uint64_t threadId = 0; threadId < stressorConfig_.numThreads; threadId++) {
-        BlockReplayStats stats = stressor_->getStat(threadId);
-        stats.render(std::cout, "\n");
+    for (uint64_t threadId = 0; threadId < numThreads; threadId++) {
+        std::string statFilePath = folly::sformat("{}/stat_{}.out", stressorConfig_.blockReplayConfig.statOutputDir, threadId);
+        std::ofstream ofs;
+        ofs.open (statFilePath, std::ofstream::out);
+        stressor_->statSnapshot(threadId, ofs, "\n");
     }
-
-    auto cacheStats = stressor_->getCacheStats();
-    cacheStats.renderBlockReplay(std::cout, "\n");
 
     return true; 
 }

@@ -47,7 +47,7 @@ class BatchBlockStressor : public BlockSystemStressor {
             // initiate spots in the vector containing pending block requests 
             for (uint64_t index=0; index<config_.blockReplayConfig.maxPendingBlockRequestCount; index++)
                 pendingBlockReqVec_.push_back(BlockRequest(lbaSizeByte_, blockSizeByte_));
-            
+                
             // init the class for generating TSC timestamp from the CPU 
             tscns_.init();
         }
@@ -83,6 +83,13 @@ class BatchBlockStressor : public BlockSystemStressor {
                     }));
                 }
 
+                // stats tracker threads
+                for (uint64_t i = 0; i < config_.numThreads; ++i) {
+                    workers.push_back(std::thread([this, index=i]() {
+                        statTracker(index);
+                    }));
+                }
+
                 for (auto& worker : workers) {
                     worker.join();
                 }
@@ -99,17 +106,71 @@ class BatchBlockStressor : public BlockSystemStressor {
             cache_->clearCache(config_.maxInvalidDestructorCount);
         }
 
-
         BlockReplayStats getStat(uint64_t threadId) const override {
             return statsVec_.at(threadId);
         }
 
-        // obtain stats from the cache instance.
         Stats getCacheStats() const override { return cache_->getStats(); }
 
+        util::PercentileStats* getQueueSizePercentile() const override { return queueSizePercentile_; }
 
-    // Update experiment statistics 
-    void statUpdate(uint64_t blockReqIndex, uint64_t threadId) {
+        util::PercentileStats* getPendingBlockReqPercentile() const override { return pendingBlockReqPercentile_; }
+
+        void statSnapshot(uint64_t threadId, std::ostream& ofs, std::string separator) override {
+            std::lock_guard<std::mutex> l(statMutex_);
+
+            ofs << folly::sformat("threadId={}{}", threadId, separator);
+            statsVec_.at(threadId).timeElapsedNs = getPhysicalTimeElapsedNs();
+
+            BlockReplayStats blockReplayStats = getStat(threadId);
+            blockReplayStats.render(ofs, separator);
+
+            auto cacheStats = getCacheStats();
+            cacheStats.renderBlockReplay(ofs, separator);
+
+            util::PercentileStats *queuePercentile = getQueueSizePercentile();
+            util::PercentileStats *pendingBlockRequestPercentile = getPendingBlockReqPercentile();
+
+            blockReplayStats.renderPercentile(ofs, "queueSize", "", separator, queuePercentile);
+            blockReplayStats.renderPercentile(ofs, "pendingBlockReqCount", "", separator, pendingBlockRequestPercentile);
+            ofs << "\n";
+        }
+
+
+    // Update stats on completion of backing store request 
+    void updateBackingStoreStats(BackingIo backingIo, uint64_t threadId) {
+        std::lock_guard<std::mutex> l(statMutex_);
+
+        uint64_t size = backingIo.getSize();
+        bool writeFlag = backingIo.getWriteFlag();
+
+        statsVec_.at(threadId).backingReqCount++;
+        statsVec_.at(threadId).backingReqByte += size; 
+
+        uint64_t physicalTs = backingIo.getPhysicalTs();
+        if (writeFlag) {
+            statsVec_.at(threadId).writeBackingReqCount++;
+            statsVec_.at(threadId).writeBackingReqByte += size; 
+            statsVec_.at(threadId).backingWriteLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).backingWriteSizeBytePercentile->trackValue(size);
+        } else {
+            statsVec_.at(threadId).readBackingReqCount++;
+            statsVec_.at(threadId).readBackingReqByte += size; 
+            statsVec_.at(threadId).backingReadLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).backingReadSizeBytePercentile->trackValue(size);
+        }
+
+        statsVec_.at(threadId).backingReqAddAttempt = backingStore_.getBackingReqAddAttempt();
+        statsVec_.at(threadId).backingReqAddFailure = backingStore_.getBackingReqAddFailure();
+    }
+
+
+    // Update stats on completion of block request 
+    void updateBlockReqStats(uint64_t blockReqIndex, uint64_t threadId) {
+        std::lock_guard<std::mutex> l(statMutex_);
+
+        statsVec_.at(threadId).blockReqCount++;
+
         uint64_t physicalTs = pendingBlockReqVec_.at(blockReqIndex).getPhysicalTs();
         uint64_t size = pendingBlockReqVec_.at(blockReqIndex).getSize();
         uint64_t offset = pendingBlockReqVec_.at(blockReqIndex).getOffset();
@@ -117,9 +178,6 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t rearMisalignByte = pendingBlockReqVec_.at(blockReqIndex).getRearMisAlignByte();
         uint64_t frontMisalignByte = pendingBlockReqVec_.at(blockReqIndex).getFrontMisAlignByte();
         bool writeFlag = pendingBlockReqVec_.at(blockReqIndex).getWriteFlag();
-        
-        statsVec_.at(threadId).blockReqCount++;
-
         if (writeFlag) {
             statsVec_.at(threadId).writeBlockReqCount++;
             statsVec_.at(threadId).writeBlockReqByte += size;
@@ -147,14 +205,32 @@ class BatchBlockStressor : public BlockSystemStressor {
         statsVec_.at(threadId).readHitByte += pendingBlockReqVec_.at(blockReqIndex).getReadHitByte();
         statsVec_.at(pendingBlockReqVec_.at(blockReqIndex).getThreadId()).physicalIatNsPercentile->trackValue(pendingBlockReqVec_.at(blockReqIndex).getIatUs());
 
+        statsVec_.at(threadId).blockReqAddAttempt = blockReqAddAttempt_;
+        statsVec_.at(threadId).blockReqAddFailure = blockReqAddFailure_;
     }
 
 
+    // Periodically snap statistics to a file
+    void statTracker(uint64_t threadId) {
+        std::string statFilePath = folly::sformat("{}/tsstat_{}.out", config_.blockReplayConfig.statOutputDir, threadId);
+
+        std::ofstream ofs; 
+        ofs.open(statFilePath, std::ofstream::out);
+        while ((!isReplayDone()) || (pendingBlockReqCount_ > 0)) {
+            std::this_thread::sleep_for (std::chrono::seconds(config_.blockReplayConfig.statTrackIntervalSec));
+            statSnapshot(threadId, ofs, ",");
+        }
+        ofs.close();
+    }
+
+
+    // Check if all replay threads have terminated
     bool isReplayDone() {
         return std::all_of(stressorTerminateFlag_.begin(), stressorTerminateFlag_.end(), [](bool b){ return b; });
     }
 
 
+    // Get the time difference or latency based on the starting cycle count 
     uint64_t getLatencyNs(uint64_t reqBeginCycleCount) {
         return tscns_.tsc2ns(tscns_.rdtsc()) - tscns_.tsc2ns(reqBeginCycleCount);
     }
@@ -162,19 +238,20 @@ class BatchBlockStressor : public BlockSystemStressor {
 
     // Process block storage requests as the replay threads adds it to the queue 
     void processBlockStorageRequestThread(uint64_t threadId) {
-        while ((!isReplayDone()) || pendingBlockReqCount_ > 0) {
+        // terminate when replay is completed and there are no pending block requests in the system 
+        while ((!isReplayDone()) || (pendingBlockReqCount_ > 0)) {
+
             BlockRequest req(lbaSizeByte_, blockSizeByte_);
-            uint64_t queueSize; 
             {
                 std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
-                queueSize = blockRequestQueue_.size();
-                if (queueSize > 0) {
+                if (queueSize_ > 0) {
                     req = blockRequestQueue_.front();
                     blockRequestQueue_.pop();
+                    queueSize_--;
                 }
             }
 
-            if (queueSize > 0) {
+            if (req.isLoaded()) {
                 uint64_t pendingBlockRequestIndex;
                 if (req.getWriteFlag()) {
                     pendingBlockRequestIndex = processBlockStorageWrite(req);
@@ -186,10 +263,19 @@ class BatchBlockStressor : public BlockSystemStressor {
                     submitToBackingStore(pendingBlockRequestIndex);
             }
         }
+
+        // notify backing store that its ok to terminate if no requests are pending 
         backingStore_.setReplayDone();
+
+        // set the time when all processing was completed 
+        for (uint64_t index=0; index<config_.numThreads; index++) {
+            std::lock_guard<std::mutex> l(statMutex_);
+            statsVec_.at(index).replayTimeNs = getPhysicalTimeElapsedNs();
+        }
     }
 
 
+    // Thread tracks backing IO request that return 
     void processBackingIoReturn() {
         while ((!isReplayDone()) || pendingBlockReqCount_ > 0) {
             // pop the index of the backing store IO that has returned 
@@ -209,6 +295,7 @@ class BatchBlockStressor : public BlockSystemStressor {
             uint64_t blockReqStartBlock, blockReqEndBlock;
             uint64_t reqThreadId; 
             uint64_t blockReqOffset; 
+            
             bool writeFlag;
             {
                 std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
@@ -250,17 +337,18 @@ class BatchBlockStressor : public BlockSystemStressor {
                 std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
                 if (pendingBlockReqVec_.at(pendingBlockReqIndex).isComplete()) {
                     setKeys(blockReqStartBlock, blockReqEndBlock, reqThreadId);
-                    statUpdate(pendingBlockReqIndex, reqThreadId);
+                    updateBlockReqStats(pendingBlockReqIndex, reqThreadId);
                     pendingBlockReqVec_.at(pendingBlockReqIndex).reset();
                     pendingBlockReqCount_--;
                 }
             }
-
+            updateBackingStoreStats(backingIo, reqThreadId);
             backingStore_.markCompleted(index);
         }
     }
 
 
+    // submit backing store requests of a given block request 
     void submitToBackingStore(uint64_t pendingBlockRequestIndex) {
         BlockRequest req(lbaSizeByte_, blockSizeByte_);
         std::vector<bool> blockCompletionVec;
@@ -285,14 +373,16 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             // there is misalignment in the front and a miss, so submit a backing read 
             if ((frontAlignmentByte > 0) & (!blockCompletionVec.at(0))) 
-                backingStore_.submitBackingStoreRequest(startBlock*blockSizeByte_, 
+                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                                                            startBlock*blockSizeByte_, 
                                                             frontAlignmentByte, 
                                                             false, 
                                                             pendingBlockRequestIndex, 
                                                             threadId);
 
             // submit write request 
-            backingStore_.submitBackingStoreRequest(offset, 
+            backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                                                        offset, 
                                                         size, 
                                                         true, 
                                                         pendingBlockRequestIndex, 
@@ -300,7 +390,8 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             // there is misalignment in the rear and a miss, so submit a backing read 
             if ((rearAlignmentByte > 0) & (!blockCompletionVec.at(2))) 
-                backingStore_.submitBackingStoreRequest(offset + size, 
+                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                                                            offset + size, 
                                                             rearAlignmentByte, 
                                                             false, 
                                                             pendingBlockRequestIndex, 
@@ -311,7 +402,8 @@ class BatchBlockStressor : public BlockSystemStressor {
                 if (blockCompletionVec.at(curBlock-startBlock)) {
                     // hit 
                     if (numMissBlock > 0) {
-                        backingStore_.submitBackingStoreRequest(missStartBlock*blockSizeByte_, 
+                        backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                                                                    missStartBlock*blockSizeByte_, 
                                                                     numMissBlock*blockSizeByte_, 
                                                                     false, 
                                                                     pendingBlockRequestIndex, 
@@ -326,7 +418,8 @@ class BatchBlockStressor : public BlockSystemStressor {
                 }
             }
             if (numMissBlock > 0) {
-                backingStore_.submitBackingStoreRequest(missStartBlock*blockSizeByte_, 
+                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                                                            missStartBlock*blockSizeByte_, 
                                                             numMissBlock*blockSizeByte_, 
                                                             false, 
                                                             pendingBlockRequestIndex, 
@@ -355,10 +448,16 @@ class BatchBlockStressor : public BlockSystemStressor {
                 break;
             }
         }
+
+        blockReqAddAttempt_++;
+        if (freeBlockReqIndex == maxPendingBlockRequestCount_)
+            blockReqAddFailure_++;
+
         return freeBlockReqIndex; 
     }
 
 
+    // Set the keys in the provided range 
     void setKeys(uint64_t startBlock, uint64_t endBlock, uint64_t threadId) {
         for (uint64_t blockId=startBlock; blockId<=endBlock; blockId++) {
             const std::string key = folly::sformat("{}{}", blockId, threadId);
@@ -409,8 +508,8 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t rearMisalignByte = req.getRearMisAlignByte();
 
         // remove all the stale keys from the cache if they exist 
-        for (int curBlock = startBlock; curBlock<(endBlock + 1); curBlock++) {
-            const std::string key = std::to_string(curBlock);
+        for (int blockId = startBlock; blockId < (endBlock + 1); blockId++) {
+            const std::string key = folly::sformat("{}{}", blockId, threadId);
             cache_->remove(key);
         }
 
@@ -452,6 +551,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t missStartBlock;
         uint64_t missPageCount = 0;
         bool blockReqCompletionFlag = false; 
+
         for (int curBlock = startBlock; curBlock<=endBlock; curBlock++) {
             if (blockInCache(curBlock, threadId)) {
                 std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
@@ -463,7 +563,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         // if all the blocks are in cache, the block request is complete 
         if (blockReqCompletionFlag) {
             std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-            statUpdate(pendingBlockRequestIndex, threadId);
+            updateBlockReqStats(pendingBlockRequestIndex, threadId);
             pendingBlockReqVec_.at(pendingBlockRequestIndex).reset();
             pendingBlockReqCount_--;
             pendingBlockRequestIndex = maxPendingBlockRequestCount_;
@@ -499,6 +599,7 @@ class BatchBlockStressor : public BlockSystemStressor {
                                                 threadId));
         blockReqCount_++;
         queueSize_++;
+        queueSizePercentile_->trackValue(queueSize_);
         updatePrevSubmitTimepoint();
     }
 
@@ -576,9 +677,11 @@ class BatchBlockStressor : public BlockSystemStressor {
     }
 
 
+    // increase the pending block request count for a specified value 
     void incPendingBlockReqCount(uint64_t value) {
         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
         pendingBlockReqCount_ += value; 
+        pendingBlockReqPercentile_->trackValue(pendingBlockReqCount_);
     }
 
 
@@ -679,6 +782,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         return val;
     }
 
+
     // stressor config and some configuration params that we store in the class 
     const StressorConfig config_; 
     uint64_t lbaSizeByte_;
@@ -701,14 +805,19 @@ class BatchBlockStressor : public BlockSystemStressor {
     // adjust maxPendingBlockRequestCount in config_.blockReplayConfig to adjust the size 
     mutable std::mutex pendingBlockReqMutex_;
     uint64_t pendingBlockReqCount_ = 0;
+    uint64_t blockReqAddFailure_ = 0;
+    uint64_t blockReqAddAttempt_ = 0;
     std::vector<BlockRequest> pendingBlockReqVec_;
+    util::PercentileStats *pendingBlockReqPercentile_ = new util::PercentileStats();
 
     // cache and backing store make up a block storage system 
     BackingStore backingStore_;
     std::unique_ptr<CacheT> cache_;
 
     // vector of stats corresponding to each replay thread 
+    mutable std::mutex statMutex_;
     std::vector<BlockReplayStats> statsVec_;
+    std::vector<std::ofstream> statsFileStreamVec_;
 
     // FIFO queue of block requests in the system waiting to be processed 
     // processing threads pop this queue to get the request to process once free 
@@ -716,6 +825,7 @@ class BatchBlockStressor : public BlockSystemStressor {
     std::queue<BlockRequest> blockRequestQueue_;
     uint64_t blockReqCount_ = 0;
     uint64_t queueSize_ = 0;
+    util::PercentileStats *queueSizePercentile_ = new util::PercentileStats();
 
     // Variables related to time sync  
     mutable std::mutex timeMutex_;
