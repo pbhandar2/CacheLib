@@ -151,12 +151,12 @@ class BatchBlockStressor : public BlockSystemStressor {
         if (writeFlag) {
             statsVec_.at(threadId).writeBackingReqCount++;
             statsVec_.at(threadId).writeBackingReqByte += size; 
-            statsVec_.at(threadId).backingWriteLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).backingWriteLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
             statsVec_.at(threadId).backingWriteSizeBytePercentile->trackValue(size);
         } else {
             statsVec_.at(threadId).readBackingReqCount++;
             statsVec_.at(threadId).readBackingReqByte += size; 
-            statsVec_.at(threadId).backingReadLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).backingReadLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
             statsVec_.at(threadId).backingReadSizeBytePercentile->trackValue(size);
         }
 
@@ -192,13 +192,13 @@ class BatchBlockStressor : public BlockSystemStressor {
                 if ((frontMisalignByte > 0) || (rearMisalignByte > 0))
                     statsVec_.at(threadId).readCacheReqCount++;
             }
-            statsVec_.at(threadId).writeLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).writeLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
         } else {
             statsVec_.at(threadId).readBlockReqCount++;
             statsVec_.at(threadId).readBlockReqByte += size;
             statsVec_.at(threadId).readMisalignByte += (frontMisalignByte + rearMisalignByte);
             statsVec_.at(threadId).readCacheReqCount += blockCount; 
-            statsVec_.at(threadId).readLatencyNsPercentile->trackValue(getLatencyNs(physicalTs));
+            statsVec_.at(threadId).readLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
         }
 
         statsVec_.at(threadId).readHitCount += pendingBlockReqVec_.at(blockReqIndex).getBlockHitCount();
@@ -233,6 +233,11 @@ class BatchBlockStressor : public BlockSystemStressor {
     // Get the time difference or latency based on the starting cycle count 
     uint64_t getLatencyNs(uint64_t reqBeginCycleCount) {
         return tscns_.tsc2ns(tscns_.rdtsc()) - tscns_.tsc2ns(reqBeginCycleCount);
+    }
+
+
+    uint64_t getCurrentTsNs() {
+        return tscns_.tsc2ns(tscns_.rdtsc());
     }
 
 
@@ -287,7 +292,7 @@ class BatchBlockStressor : public BlockSystemStressor {
             BackingIo backingIo = backingStore_.getBackingIo(index);
             uint64_t pendingBlockReqIndex = backingIo.getBlockRequestIndex();
             uint64_t backingIoSize = backingIo.getSize();
-            uint64_t backingIoOffset = backingIo.getOffset();
+            uint64_t backingIoOffset = backingIo.getOffset() + config_.blockReplayConfig.minOffset;
             uint64_t backingIoStartBlock = backingIoOffset/blockSizeByte_;
             uint64_t backingIoEndBlock = (backingIoOffset + backingIoSize - 1)/blockSizeByte_;
             bool backingIoWriteFlag = backingIo.getWriteFlag();
@@ -373,7 +378,7 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             // there is misalignment in the front and a miss, so submit a backing read 
             if ((frontAlignmentByte > 0) & (!blockCompletionVec.at(0))) 
-                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                backingStore_.submitBackingStoreRequest(getCurrentTsNs(),
                                                             startBlock*blockSizeByte_, 
                                                             frontAlignmentByte, 
                                                             false, 
@@ -381,7 +386,7 @@ class BatchBlockStressor : public BlockSystemStressor {
                                                             threadId);
 
             // submit write request 
-            backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+            backingStore_.submitBackingStoreRequest(getCurrentTsNs(),
                                                         offset, 
                                                         size, 
                                                         true, 
@@ -390,7 +395,7 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             // there is misalignment in the rear and a miss, so submit a backing read 
             if ((rearAlignmentByte > 0) & (!blockCompletionVec.at(2))) 
-                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                backingStore_.submitBackingStoreRequest(getCurrentTsNs(),
                                                             offset + size, 
                                                             rearAlignmentByte, 
                                                             false, 
@@ -402,7 +407,7 @@ class BatchBlockStressor : public BlockSystemStressor {
                 if (blockCompletionVec.at(curBlock-startBlock)) {
                     // hit 
                     if (numMissBlock > 0) {
-                        backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                        backingStore_.submitBackingStoreRequest(getCurrentTsNs(),
                                                                     missStartBlock*blockSizeByte_, 
                                                                     numMissBlock*blockSizeByte_, 
                                                                     false, 
@@ -418,7 +423,7 @@ class BatchBlockStressor : public BlockSystemStressor {
                 }
             }
             if (numMissBlock > 0) {
-                backingStore_.submitBackingStoreRequest(getCurrentCycleCount(),
+                backingStore_.submitBackingStoreRequest(getCurrentTsNs(),
                                                             missStartBlock*blockSizeByte_, 
                                                             numMissBlock*blockSizeByte_, 
                                                             false, 
@@ -610,7 +615,6 @@ class BatchBlockStressor : public BlockSystemStressor {
         std::optional<uint64_t> lastRequestId = std::nullopt;
         const Request& req(wg_->getReq(0, gen, lastRequestId));
 
-        uint64_t physicalTs = getCurrentCycleCount();
         uint64_t ts = req.timestamp;
         uint64_t lba = std::stoul(req.key);
         uint64_t size = *(req.sizeBegin);
@@ -689,7 +693,7 @@ class BatchBlockStressor : public BlockSystemStressor {
     void submitBatch(std::vector<BlockRequest>& blockReqVec) {
         std::lock_guard<std::mutex> l(blockRequestQueueMutex_);
         for (BlockRequest req : blockReqVec) {
-            addToQueue(req.getPhysicalTs(),
+            addToQueue(getCurrentTsNs(),
                         req.getTs(), 
                         req.getLba(), 
                         req.getSize(), 

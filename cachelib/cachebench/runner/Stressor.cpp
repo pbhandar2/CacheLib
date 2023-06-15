@@ -140,6 +140,7 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   return *this;
 }
 
+
 void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
 
@@ -194,6 +195,7 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   }
 }
 
+
 void ThroughputStats::render(uint64_t elapsedTimeNs,
                              folly::UserCounters& counters) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
@@ -227,6 +229,7 @@ void ThroughputStats::render(uint64_t elapsedTimeNs,
   counters["addChain_suc_rate"] =
       util::narrow_cast<uint64_t>(addChainedSuccessRate);
 }
+
 
 namespace {
 std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {

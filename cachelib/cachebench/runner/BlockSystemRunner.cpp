@@ -12,8 +12,8 @@ BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config)
     stressorConfig_ = config.getStressorConfig();
 }
 
-bool BlockSystemRunner::run() {
 
+bool BlockSystemRunner::run() {
     stressor_->start();
     stressor_->finish();
 
@@ -28,6 +28,7 @@ bool BlockSystemRunner::run() {
 
     return true; 
 }
+
 
 }
 }

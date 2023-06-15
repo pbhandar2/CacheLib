@@ -2,7 +2,6 @@
 
 #include <libaio.h>
 #include "cachelib/cachebench/util/Config.h"
-#include "cachelib/cachebench/runner/tscns.h"
 
 
 namespace facebook {
@@ -111,7 +110,15 @@ class BackingStore {
 
         // submit a request to backing storage 
         void submitBackingStoreRequest(uint64_t physicalTs, uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex, uint64_t threadId) {
+
+            if (offset < config_.blockReplayConfig.minOffset) {
+                throw std::runtime_error(folly::sformat("Min offset specified: {} but offset encountered {} \n", config_.blockReplayConfig.minOffset, offset));
+            }
+
+            offset -= config_.blockReplayConfig.minOffset;
+
             std::lock_guard<std::mutex> l(pendingBackingIoMutex_);
+
             uint64_t index = submitToBackingStore(physicalTs, offset, size, writeFlag, blockRequestIndex);
             while (index == maxPendingBackingStoreIoCount_)
                 index = submitToBackingStore(physicalTs, offset, size, writeFlag, blockRequestIndex);

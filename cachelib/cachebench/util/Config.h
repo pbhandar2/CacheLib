@@ -74,6 +74,8 @@ struct BlockReplayConfig : public JSONConfig {
   uint64_t batchSubmitIntervalUs{1000};
 
   uint64_t statTrackIntervalSec{30};
+
+  uint64_t minOffset{0};
 };
 
 struct DistributionConfig : public JSONConfig {
