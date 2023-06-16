@@ -10,6 +10,7 @@
         "numThreads": 3,
         "blockReplayConfig": {
             "traces": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv",
+                        "/users/pbhandar/disk/CacheLib/phdthesis/scripts/data/1_1.csv",
                         "/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv",
                         "/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_b.csv"],
             "backingFiles": ["/users/pbhandar/disk/disk.file", "/users/pbhandar/disk/disk2.file", "/users/pbhandar/disk/disk1.file"],

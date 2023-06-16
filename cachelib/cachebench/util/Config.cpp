@@ -34,9 +34,7 @@ BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, maxPendingBackingStoreIoCount);
   JSONSetVal(configJson, blockRequestProcesserThreads);
   JSONSetVal(configJson, globalClock);
-  JSONSetVal(configJson, idleWaitTimeUs);
   JSONSetVal(configJson, minSleepTimeUs);
-  JSONSetVal(configJson, batchSubmitIntervalUs);
   JSONSetVal(configJson, asyncIOReturnTrackerThreads);
   JSONSetVal(configJson, statTrackIntervalSec);
   JSONSetVal(configJson, minOffset);
