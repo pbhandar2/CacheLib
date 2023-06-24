@@ -752,6 +752,7 @@ class BatchBlockStressor : public BlockSystemStressor {
     // @param stats       Block replay stats 
     // @param fileIndex   The index used to map to resources of the file being replayed 
     void replay(BlockReplayStats& stats, uint64_t threadId) {
+        std::cout << folly::sformat("Block trace replay thread {} initiated\n", threadId);
         BlockRequest nextBlockReq(lbaSizeByte_, blockSizeByte_); // next block request to submit 
         std::vector<BlockRequest> blockReqVec; // current batch of block requests to submit 
         do {

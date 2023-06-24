@@ -1,0 +1,37 @@
+{
+    "cache_config": {
+        "lruUpdateOnWrite": true,
+        "cacheSizeMB": 110000,
+        "allocSizes": [
+            4136
+        ],
+        "nvmCacheSizeMB": 420000,
+        "nvmCachePaths": [
+            "/users/pbhandar/nvm/disk.file"
+        ],
+        "navySizeClasses": [],
+        "navyBigHashSizePct": 0,
+        "truncateItemToOriginalAllocSizeInNvm": true,
+        "printNvmCounters": true
+    },
+    "test_config": {
+        "name": "block-storage",
+        "generator": "block-replay",
+        "numThreads": 1,
+        "blockReplayConfig": {
+            "traces": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv"],
+            "backingFiles": [
+                "/users/pbhandar/disk/disk.file"
+            ],
+            "globalClock": false,
+            "blockRequestProcesserThreads": 4,
+            "asyncIOReturnTrackerThreads": 4,
+            "minSleepTimeUs": 5,
+            "maxPendingBlockRequestCount": 128,
+            "maxPendingBackingStoreIoCount": 64000,
+            "minOffset": 0,
+            "replayRate": 1
+        },
+        "tag": "node13.c220g1-exp1.multitier-cache-pg0.wisc.cloudlab.us"
+    }
+}

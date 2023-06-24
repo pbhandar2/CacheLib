@@ -38,7 +38,7 @@ BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, asyncIOReturnTrackerThreads);
   JSONSetVal(configJson, statTrackIntervalSec);
   JSONSetVal(configJson, minOffset);
-  checkCorrectSize<BlockReplayConfig, 168>();
+  checkCorrectSize<BlockReplayConfig, 160>();
 }
 
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
@@ -110,7 +110,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 664>();
+  checkCorrectSize<StressorConfig, 656>();
 }
 
 bool StressorConfig::usesChainedItems() const {

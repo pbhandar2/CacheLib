@@ -65,14 +65,6 @@ struct BlockReplayConfig : public JSONConfig {
   //  the IAT of each block request is followed even if the replay time is ahead of trace time 
   bool globalClock{true};
 
-  // only applicable when globalClock is false 
-  // if -1: if there are no outstanding block requests in the system ignore the inter-arrival time and submit the block request 
-  // if 0: follow trace timestamps 
-  // if N: where N>0 wait for min(N, inter-arrival time)
-  int32_t idleWaitTimeUs{0};
-
-  uint64_t batchSubmitIntervalUs{1000};
-
   uint64_t statTrackIntervalSec{30};
 
   uint64_t minOffset{0};
