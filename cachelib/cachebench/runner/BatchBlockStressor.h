@@ -165,12 +165,12 @@ class BatchBlockStressor : public BlockSystemStressor {
 
 
     // Update stats on completion of block request 
-    void updateBlockReqStats(uint64_t blockReqIndex, uint64_t threadId, uint64_t readHitFlag) {
+    void updateBlockReqStats(uint64_t blockReqIndex, uint64_t threadId) {
         std::lock_guard<std::mutex> l(statMutex_);
 
         // make sure that when you update stats for a block request, it is loaded 
         if (!pendingBlockReqVec_.at(blockReqIndex).isLoaded())
-            throw std::runtime_error(folly::sformat("Updating stats for a block request that is not loaded. asdsa{} \n", readHitFlag));
+            throw std::runtime_error(folly::sformat("Updating stats for a block request that is not loaded. \n"));
 
         statsVec_.at(threadId).blockReqCount++;
 
@@ -566,7 +566,7 @@ class BatchBlockStressor : public BlockSystemStressor {
 
         // if all the blocks are in cache, the block request is complete 
         if (pendingBlockReqVec_.at(pendingBlockRequestIndex).isComplete()) {
-            updateBlockReqStats(pendingBlockRequestIndex, threadId, 0);
+            updateBlockReqStats(pendingBlockRequestIndex, threadId);
             pendingBlockReqVec_.at(pendingBlockRequestIndex).reset();
             pendingBlockReqCount_--;
             pendingBlockRequestIndex = maxPendingBlockRequestCount_;
