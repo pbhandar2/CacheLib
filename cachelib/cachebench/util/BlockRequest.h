@@ -40,7 +40,10 @@ class BlockRequest {
                     bool writeFlag, 
                     uint64_t blockRequestIndex, 
                     uint64_t threadId) {
-                    
+            
+            if (size_ > 0)
+                throw std::runtime_error(folly::sformat("Loading a block request which is already loaded \n"));
+
             physicalTs_ = physicalTs;
             traceTs_ = ts; 
             lba_ = lba;
@@ -81,89 +84,113 @@ class BlockRequest {
                 blockIoCompletionVec_.at(2) = true; 
         }
 
+
         bool isLoaded() {
             return size_ > 0;
         }
 
+
         void reset() {
-            hitsTracked_ = false; 
+            if (size_ == 0)
+                throw std::runtime_error(folly::sformat("Reseting a empty block request {}\n", blockRequestIndex_));
+            
+            blockRequestIndex_ = 0;
             size_ = 0;
             blockHitCount_ = 0;
             readHitByte_ = 0; 
             blockIoCompletionVec_.clear();
         }
 
+
         uint64_t getPhysicalTs() {
             return physicalTs_;
         }
+
 
         uint64_t getTs() {
             return traceTs_;
         }
 
+
         uint64_t getIatUs() {
             return iatUs_;
         }
+
 
         uint64_t getLba() {
             return lba_;
         }
 
+
         uint64_t blockCount() {
             return endBlock_ - startBlock_ + 1;
         }
+
 
         uint64_t getSize() {
             return size_;
         }
 
+
         bool getWriteFlag() {
             return writeFlag_;
         }
+
 
         uint64_t getBlockRequestIndex() {
             return blockRequestIndex_;
         }
 
+
         uint64_t getThreadId() {
             return threadId_;
         }
+
 
         uint64_t getStartBlock() {
             return startBlock_;
         }
 
+
         uint64_t getFrontMisAlignByte() {
             return frontMisalignByte_;
         }
+
 
         uint64_t getRearMisAlignByte() {
             return rearMisalignByte_;
         }
 
+
         uint64_t getEndBlock() {
             return endBlock_;
         }
+
 
         uint64_t getOffset() {
             return offsetByte_;
         }
 
+
         uint64_t getReadHitByte() {
             return readHitByte_;
         }
+
 
         uint64_t getBlockHitCount() {
             return blockHitCount_;
         }
 
+
         void setIatUs(uint64_t iatUs) {
             iatUs_ = iatUs; 
         }
 
+
         std::vector<bool> getBlockIoCompletionVec() {
             return blockIoCompletionVec_;
         }
+
 
         void setCacheHit(uint64_t blockIndex, bool updateHitData) {
             if (blockIndex >= blockIoCompletionVec_.size())
@@ -175,8 +202,9 @@ class BlockRequest {
             blockIoCompletionVec_.at(blockIndex) = true; 
             if (updateHitData) {
                 blockHitCount_++;
-
                 if (writeFlag_) {
+                    // if it is a write block request track the read hits
+                    // of data that would have to be read due to misalignment 
                     if ((blockIndex == 0) & (frontMisalignByte_ > 0)) {
                         readHitByte_ += frontMisalignByte_;
                     }
@@ -184,6 +212,7 @@ class BlockRequest {
                         readHitByte_ += rearMisalignByte_;
                     }
                 } else {
+                    // track the read hit byte and account for misalignment 
                     readHitByte_ += blockSizeByte_;
                     if ((blockIndex == 0) & (frontMisalignByte_ > 0)) {
                         readHitByte_ -= (frontMisalignByte_);
@@ -195,6 +224,7 @@ class BlockRequest {
             }
 
         }
+
 
         void backingIoReturn(uint64_t backingOffset, uint64_t backingSize, bool backingWriteFlag) {
             uint64_t backingStartBlock = backingOffset/blockSizeByte_;
@@ -211,13 +241,18 @@ class BlockRequest {
                     // misalignment cannot touch more than a single page 
                     if (backingStartBlock == backingEndBlock)
                         throw std::runtime_error("Misalignment read extends to multiple pages!\n");
-
+                    
+                    // there can be a maximum of two read request (front page and back page) if 
+                    // a write block request is misaligned
+                    // if the offset of a read request is less than the offset where the write 
+                    // starts, it must be the first page otherwise it must be the last 
                     if (backingOffset < offsetByte_) {
                         blockIoCompletionVec_.at(0) = true; 
                     } else {
                         blockIoCompletionVec_.at(2) = true; 
                     }
                 } else {
+                    // mark the pages that were touched by this backing IO returning 
                     for (uint64_t curBlock=backingStartBlock; curBlock<=backingEndBlock; curBlock++) {
                         uint64_t blockIndex = curBlock - startBlock_;
                         blockIoCompletionVec_.at(blockIndex) = true; 
@@ -226,32 +261,34 @@ class BlockRequest {
             }
         }
 
+
         bool isComplete() {
             return std::all_of(blockIoCompletionVec_.begin(), blockIoCompletionVec_.end(), [](bool b) { return b; });
         }
 
 
-    uint64_t traceTs_;
-    uint64_t physicalTs_;
-
-    bool writeFlag_;
-    uint64_t size_ = 0;
-    uint64_t blockHitCount_ = 0;
-    uint64_t readHitByte_ = 0;
-    bool hitsTracked_ = false; 
-
-    uint64_t lba_;
-    uint64_t offsetByte_;
-    
+    // basic config 
     uint64_t lbaSizeByte_;
     uint64_t blockSizeByte_;
-    uint64_t blockRequestIndex_;
+
+    // block request attributes 
+    bool writeFlag_;
+    uint64_t iatUs_;
+    uint64_t traceTs_;
+    uint64_t physicalTs_;
+    uint64_t size_ = 0;
     uint64_t threadId_;
+    uint64_t lba_;
+    uint64_t offsetByte_;
     uint64_t startBlock_;
     uint64_t endBlock_;
     uint64_t frontMisalignByte_;
     uint64_t rearMisalignByte_;
-    uint64_t iatUs_;
+    uint64_t blockRequestIndex_;
+    
+    // cache hit and completion stats 
+    uint64_t blockHitCount_ = 0;
+    uint64_t readHitByte_ = 0;
     std::vector<bool> blockIoCompletionVec_;
 };
 

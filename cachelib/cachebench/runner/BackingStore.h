@@ -243,13 +243,14 @@ class BackingStore {
 
                 }
             }
+            std::cout << folly::sformat("Track completed IO terminated\n");
         }
 
 
         // initiate a new backing storage request and add it to vector of pending backing storage request 
         uint64_t submitToBackingStore(uint64_t physicalTs, uint64_t offset, uint64_t size, bool writeFlag, uint64_t blockRequestIndex) {
             uint64_t submitIndex = maxPendingBackingStoreIoCount_;
-            if (BackingIoCount_ < maxPendingBackingStoreIoCount_) {
+            if (pendingIoCount_ < maxPendingBackingStoreIoCount_) {
                 for (int index=0; index<maxPendingBackingStoreIoCount_; index++) {
                     if (!backingIoVec_.at(index).isLoaded()) {
                         backingIoVec_.at(index).load(physicalTs, offset, size, writeFlag, blockRequestIndex);

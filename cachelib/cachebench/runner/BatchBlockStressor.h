@@ -96,7 +96,6 @@ class BatchBlockStressor : public BlockSystemStressor {
             });
         }
 
-
         // wait for worker threads to terminate and cleanup 
         void finish() override {
             if (threads_.joinable()) 
@@ -166,8 +165,12 @@ class BatchBlockStressor : public BlockSystemStressor {
 
 
     // Update stats on completion of block request 
-    void updateBlockReqStats(uint64_t blockReqIndex, uint64_t threadId) {
+    void updateBlockReqStats(uint64_t blockReqIndex, uint64_t threadId, uint64_t readHitFlag) {
         std::lock_guard<std::mutex> l(statMutex_);
+
+        // make sure that when you update stats for a block request, it is loaded 
+        if (!pendingBlockReqVec_.at(blockReqIndex).isLoaded())
+            throw std::runtime_error(folly::sformat("Updating stats for a block request that is not loaded. asdsa{} \n", readHitFlag));
 
         statsVec_.at(threadId).blockReqCount++;
 
@@ -178,6 +181,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t rearMisalignByte = pendingBlockReqVec_.at(blockReqIndex).getRearMisAlignByte();
         uint64_t frontMisalignByte = pendingBlockReqVec_.at(blockReqIndex).getFrontMisAlignByte();
         bool writeFlag = pendingBlockReqVec_.at(blockReqIndex).getWriteFlag();
+
         if (writeFlag) {
             statsVec_.at(threadId).writeBlockReqCount++;
             statsVec_.at(threadId).writeBlockReqByte += size;
@@ -221,6 +225,7 @@ class BatchBlockStressor : public BlockSystemStressor {
             statSnapshot(threadId, ofs, ",");
         }
         ofs.close();
+        std::cout << "Stat thread terminated\n";
     }
 
 
@@ -264,6 +269,8 @@ class BatchBlockStressor : public BlockSystemStressor {
                     pendingBlockRequestIndex = processBlockStorageRead(req);
                 }
 
+                // if pending block request is higher than the max value, it means 
+                // that the block request is already completed (cache hit)
                 if (pendingBlockRequestIndex < maxPendingBlockRequestCount_)
                     submitToBackingStore(pendingBlockRequestIndex);
             }
@@ -277,6 +284,8 @@ class BatchBlockStressor : public BlockSystemStressor {
             std::lock_guard<std::mutex> l(statMutex_);
             statsVec_.at(index).replayTimeNs = getPhysicalTimeElapsedNs();
         }
+
+        std::cout << "Block request processer thread terminated \n";
     }
 
 
@@ -290,66 +299,58 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             // get the backing IO from backing store 
             BackingIo backingIo = backingStore_.getBackingIo(index);
-            uint64_t pendingBlockReqIndex = backingIo.getBlockRequestIndex();
+            uint64_t blockReqIndex = backingIo.getBlockRequestIndex();
+
+            // get the start and end page that is touched by the return backing IO request 
             uint64_t backingIoSize = backingIo.getSize();
             uint64_t backingIoOffset = backingIo.getOffset() + config_.blockReplayConfig.minOffset;
             uint64_t backingIoStartBlock = backingIoOffset/blockSizeByte_;
             uint64_t backingIoEndBlock = (backingIoOffset + backingIoSize - 1)/blockSizeByte_;
             bool backingIoWriteFlag = backingIo.getWriteFlag();
 
-            uint64_t blockReqStartBlock, blockReqEndBlock;
-            uint64_t reqThreadId; 
-            uint64_t blockReqOffset; 
-            
-            bool writeFlag;
-            {
-                std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                blockReqStartBlock = pendingBlockReqVec_.at(pendingBlockReqIndex).getStartBlock();
-                blockReqEndBlock = pendingBlockReqVec_.at(pendingBlockReqIndex).getEndBlock();
-                reqThreadId = pendingBlockReqVec_.at(pendingBlockReqIndex).getThreadId();
-                writeFlag = pendingBlockReqVec_.at(pendingBlockReqIndex).getWriteFlag();
-                blockReqOffset = pendingBlockReqVec_.at(pendingBlockReqIndex).getOffset();
-            }
+            std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
 
+            // make sure that the block request for which backing IO returned is not completed 
+            if (pendingBlockReqVec_.at(blockReqIndex).isComplete()) 
+                throw std::runtime_error("Block request already completed when backing IO returned\n");
+            
+            // get the start and end page of the block request 
+            uint64_t blockReqStartBlock = pendingBlockReqVec_.at(blockReqIndex).getStartBlock();
+            uint64_t blockReqEndBlock = pendingBlockReqVec_.at(blockReqIndex).getEndBlock();
+            uint64_t reqThreadId = pendingBlockReqVec_.at(blockReqIndex).getThreadId();
+            bool writeFlag = pendingBlockReqVec_.at(blockReqIndex).getWriteFlag();
+            uint64_t blockReqOffset = pendingBlockReqVec_.at(blockReqIndex).getOffset();
+            
             if (!writeFlag) {
-                for (uint64_t curBlock=backingIoStartBlock; curBlock<=backingIoEndBlock; curBlock++) {
-                    {
-                        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                        pendingBlockReqVec_.at(pendingBlockReqIndex).setCacheHit(curBlock - blockReqStartBlock, false);
-                    }
-                }
+                // mark the relevant page as completed without updating hit statistics 
+                for (uint64_t curBlock=backingIoStartBlock; curBlock<=backingIoEndBlock; curBlock++) 
+                    pendingBlockReqVec_.at(blockReqIndex).setCacheHit(curBlock - blockReqStartBlock, false);
             } else {
                 if (backingIoWriteFlag) {
-                    {
-                        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                        pendingBlockReqVec_.at(pendingBlockReqIndex).setCacheHit(1, false);
-                    }
+                    // it it is a write to backing store then set cache hit at index 1 and do not count it as a hit 
+                    pendingBlockReqVec_.at(blockReqIndex).setCacheHit(1, false);
                 } else {
                     if (backingIoOffset < blockReqOffset) {
-                        {
-                            std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                            pendingBlockReqVec_.at(pendingBlockReqIndex).setCacheHit(0, false);
-                        }
+                        // front misalignment read would have an offset lower than start offset of write 
+                        pendingBlockReqVec_.at(blockReqIndex).setCacheHit(0, false);
                     } else {
-                        {
-                            std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                            pendingBlockReqVec_.at(pendingBlockReqIndex).setCacheHit(2, false);
-                        }
+                        // rear misalignment read would have an offset greater than end offset of write 
+                        pendingBlockReqVec_.at(blockReqIndex).setCacheHit(2, false);
                     }
                 }
             }
-            {
-                std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                if (pendingBlockReqVec_.at(pendingBlockReqIndex).isComplete()) {
-                    setKeys(blockReqStartBlock, blockReqEndBlock, reqThreadId);
-                    updateBlockReqStats(pendingBlockReqIndex, reqThreadId);
-                    pendingBlockReqVec_.at(pendingBlockReqIndex).reset();
-                    pendingBlockReqCount_--;
-                }
+
+            if (pendingBlockReqVec_.at(blockReqIndex).isComplete()) {
+                setKeys(blockReqStartBlock, blockReqEndBlock, reqThreadId);
+                updateBlockReqStats(blockReqIndex, reqThreadId);
+                pendingBlockReqVec_.at(blockReqIndex).reset();
+                pendingBlockReqCount_--;
             }
+            
             updateBackingStoreStats(backingIo, reqThreadId);
             backingStore_.markCompleted(index);
         }
+        std::cout << "IO tracker thoughts terminated \n";
     }
 
 
@@ -556,19 +557,16 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t missStartBlock;
         uint64_t missPageCount = 0;
         bool blockReqCompletionFlag = false; 
-
+        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
         for (int curBlock = startBlock; curBlock<=endBlock; curBlock++) {
             if (blockInCache(curBlock, threadId)) {
-                std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                pendingBlockReqVec_.at(pendingBlockRequestIndex).setCacheHit(curBlock - startBlock, true);
-                blockReqCompletionFlag = pendingBlockReqVec_.at(pendingBlockRequestIndex).isComplete();
+                pendingBlockReqVec_.at(pendingBlockRequestIndex).setCacheHit(curBlock - startBlock, true);;
             }
         }
 
         // if all the blocks are in cache, the block request is complete 
-        if (blockReqCompletionFlag) {
-            std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-            updateBlockReqStats(pendingBlockRequestIndex, threadId);
+        if (pendingBlockReqVec_.at(pendingBlockRequestIndex).isComplete()) {
+            updateBlockReqStats(pendingBlockRequestIndex, threadId, 0);
             pendingBlockReqVec_.at(pendingBlockRequestIndex).reset();
             pendingBlockReqCount_--;
             pendingBlockRequestIndex = maxPendingBlockRequestCount_;
@@ -741,7 +739,8 @@ class BatchBlockStressor : public BlockSystemStressor {
                 traceIatUs = nextBlockReq.getTs() - blockReqVec.back().getTs();
             }
         } catch (const cachebench::EndOfTrace& ex) {
-            nextBlockReq.reset();
+            if (nextBlockReq.isLoaded())
+                nextBlockReq.reset();
         }
         return nextBlockReq;
     }
@@ -773,7 +772,9 @@ class BatchBlockStressor : public BlockSystemStressor {
 
         stats.replayTimeNs = getPhysicalTimeElapsedNs();
         wg_->markFinish();
-        stressorTerminateFlag_.at(threadId) = true;         
+        stressorTerminateFlag_.at(threadId) = true;     
+
+        std::cout << "Replay thread terminated\n"; 
     }
 
 

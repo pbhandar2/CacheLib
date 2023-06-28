@@ -9,12 +9,12 @@
         "generator": "block-replay",
         "numThreads": 1,
         "blockReplayConfig": {
-            "traces": ["/users/pbhandar/disk/CacheLib/phdthesis/scripts/data/5_1.csv"],
+            "traces": ["/users/pbhandar/disk/w20.csv"],
             "backingFiles": ["/users/pbhandar/disk/disk.file"],
             "globalClock": false,
             "blockRequestProcesserThreads": 4,
-            "asyncIOReturnTrackerThreads": 2,
-            "minSleepTimeUs": 3,
+            "asyncIOReturnTrackerThreads": 4,
+            "minSleepTimeUs": 5,
             "maxPendingBlockRequestCount": 128
         }
     }
