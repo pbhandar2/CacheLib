@@ -63,6 +63,7 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter, b
   // block req add attempt/failure 
   out << folly::sformat("blockReqAddAttempt={}{}", blockReqAddAttempt, delimiter);
   out << folly::sformat("blockReqAddFailure={}{}", blockReqAddFailure, delimiter);
+  out << folly::sformat("blockReqAddNoRetryCount={}{}", blockReqAddNoRetryCount, delimiter);
 
   // backing stats 
   out << folly::sformat("backingReqCount={}{}", backingReqCount, delimiter);

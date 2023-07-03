@@ -57,6 +57,7 @@ struct BlockReplayStats {
 
   uint64_t backingReqAddAttempt{0};
   uint64_t backingReqAddFailure{0};
+  uint64_t blockReqAddNoRetryCount{0};
 
   // NOTE: this can overflow, not sure what to do 
   // Back of the envelop calculation it can support, 1 bil request with 9 second latency, then it will overflow 

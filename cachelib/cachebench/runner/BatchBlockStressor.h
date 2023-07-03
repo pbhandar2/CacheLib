@@ -214,6 +214,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         statsVec_.at(pendingBlockReqVec_.at(blockReqIndex).getThreadId()).physicalIatNsTotal += pendingBlockReqVec_.at(blockReqIndex).getIatUs();
         statsVec_.at(threadId).blockReqAddAttempt = blockReqAddAttempt_;
         statsVec_.at(threadId).blockReqAddFailure = blockReqAddFailure_;
+        statsVec_.at(threadId).blockReqAddNoRetryCount = blockReqAddNoRetryCount_;
     }
 
     // Periodically snap statistics to a file
