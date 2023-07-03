@@ -9,7 +9,7 @@
         "generator": "block-replay",
         "numThreads": 1,
         "blockReplayConfig": {
-            "traces": ["/users/pbhandar/disk/w20.csv"],
+            "traces": ["/users/pbhandar/disk/w105_1000.csv"],
             "backingFiles": ["/users/pbhandar/disk/disk.file"],
             "globalClock": false,
             "blockRequestProcesserThreads": 4,

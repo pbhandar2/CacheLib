@@ -34,7 +34,7 @@ namespace cachelib {
 namespace cachebench {
 
 
-void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) const {
+void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter, bool renderPercentileFlag) const {
   auto getPercent = [](uint64_t count, uint64_t total) {
     return (total==0) ? 0.0 : static_cast<double>((100*count))/static_cast<double>(total);
   };
@@ -55,6 +55,7 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) c
   // read byte hit rate 
   out << folly::sformat("readHitByte={}{}", readHitByte, delimiter);
   out << folly::sformat("readByteHitRate={:.5f}{}", getPercent(readHitByte, readBlockReqByte+writeMisalignByte), delimiter);
+  out << folly::sformat("overallByteHitRate={:.5f}{}", getPercent(readHitByte, readBlockReqByte+writeBlockReqByte), delimiter);
   // block cache hit rate 
   out << folly::sformat("readCacheReqCount={}{}", readCacheReqCount, delimiter);
   out << folly::sformat("readCacheHitCount={}{}", readHitCount, delimiter);
@@ -62,10 +63,6 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) c
   // block req add attempt/failure 
   out << folly::sformat("blockReqAddAttempt={}{}", blockReqAddAttempt, delimiter);
   out << folly::sformat("blockReqAddFailure={}{}", blockReqAddFailure, delimiter);
-
-  renderPercentile(out, "physicalIat", "ns", delimiter, physicalIatNsPercentile);
-  renderPercentile(out, "blockReadLatency", "ns", delimiter, readLatencyNsPercentile);
-  renderPercentile(out, "blockWriteLatency", "ns", delimiter, writeLatencyNsPercentile);
 
   // backing stats 
   out << folly::sformat("backingReqCount={}{}", backingReqCount, delimiter);
@@ -78,12 +75,41 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter) c
   out << folly::sformat("backingReqAddFailure={}{}", backingReqAddFailure, delimiter);
 
   // backing read/write latency 
-  renderPercentile(out, "backingReadLatency", "ns", delimiter, backingReadLatencyNsPercentile);
-  renderPercentile(out, "backingWriteLatency", "ns", delimiter, backingWriteLatencyNsPercentile);
+  if (renderPercentileFlag) {
+    renderPercentile(out, "backingReadSize", "byte", delimiter, backingReadSizeBytePercentile);
+    renderPercentile(out, "backingWriteSize", "byte", delimiter, backingWriteSizeBytePercentile);
+    renderPercentile(out, "physicalIat", "ns", delimiter, physicalIatNsPercentile);
+    renderPercentile(out, "backingReadLatency", "ns", delimiter, backingReadLatencyNsPercentile);
+    renderPercentile(out, "backingWriteLatency", "ns", delimiter, backingWriteLatencyNsPercentile);
+    renderPercentile(out, "blockReadSize", "byte", delimiter, blockReadSizeBytePercentile);
+    renderPercentile(out, "blockWriteSize", "byte", delimiter, blockWriteSizeBytePercentile);
+    renderPercentile(out, "blockReadLatency", "ns", delimiter, readLatencyNsPercentile);
+    renderPercentile(out, "blockWriteLatency", "ns", delimiter, writeLatencyNsPercentile);
+  } else {
+    uint64_t meanBlockReadLatencyNs = readLatencyNsTotal/readBlockReqCount;
+    uint64_t meanBlockWriteLatencyNs = writeLatencyNsTotal/writeBlockReqCount;
+    uint64_t meanBackingReadLatencyNs = backingReadLatencyNsTotal/readBackingReqCount;
+    uint64_t meanBackingWriteLatencyNs = backingWriteLatencyNsTotal/writeBackingReqCount;
+    uint64_t meanBackingReadSize = readBackingReqByte/readBackingReqCount;
+    uint64_t meanBackingWriteSize = writeBackingReqByte/writeBackingReqCount;
+    uint64_t meanReadSize = readBlockReqByte/readBlockReqCount;
+    uint64_t meanWriteSize = writeBlockReqByte/writeBlockReqCount;
+    uint64_t meanIat = physicalIatNsTotal/blockReqCount;
 
-  renderPercentile(out, "backingReadSize", "byte", delimiter, backingReadSizeBytePercentile);
-  renderPercentile(out, "backingWriteSize", "byte", delimiter, backingWriteSizeBytePercentile);
+    out << folly::sformat("backingReadSize_avg_byte={}{}", meanBackingReadSize, delimiter);
+    out << folly::sformat("backingWriteSize_avg_byte={}{}", meanBackingWriteSize, delimiter);
 
+    out << folly::sformat("backingReadLatency_avg_ns={}{}", meanBackingReadLatencyNs, delimiter);
+    out << folly::sformat("backingWriteLatency_avg_ns={}{}", meanBackingWriteLatencyNs, delimiter);
+
+    out << folly::sformat("blockReadSize_avg_byte={}{}", meanReadSize, delimiter);
+    out << folly::sformat("blockWriteSize_avg_byte={}{}", meanWriteSize, delimiter);
+
+    out << folly::sformat("physicalIat_avg_ns={}{}", meanIat, delimiter);
+
+    out << folly::sformat("blockReadLatency_avg_ns={}{}", meanBlockReadLatencyNs, delimiter);
+    out << folly::sformat("blockWriteLatency_avg_ns={}{}", meanBlockWriteLatencyNs, delimiter);
+  }
 }
 
 

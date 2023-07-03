@@ -22,8 +22,8 @@ bool BlockSystemRunner::run() {
     for (uint64_t threadId = 0; threadId < numThreads; threadId++) {
         std::string statFilePath = folly::sformat("{}/stat_{}.out", stressorConfig_.blockReplayConfig.statOutputDir, threadId);
         std::ofstream ofs;
-        ofs.open (statFilePath, std::ofstream::out);
-        stressor_->statSnapshot(threadId, ofs, "\n");
+        ofs.open(statFilePath, std::ofstream::out);
+        stressor_->statSnapshot(threadId, ofs, "\n", true);
     }
 
     return true; 

@@ -58,18 +58,31 @@ struct BlockReplayStats {
   uint64_t backingReqAddAttempt{0};
   uint64_t backingReqAddFailure{0};
 
+  // NOTE: this can overflow, not sure what to do 
+  // Back of the envelop calculation it can support, 1 bil request with 9 second latency, then it will overflow 
+  uint64_t readLatencyNsTotal{0};
+  uint64_t writeLatencyNsTotal{0};
+
+  uint64_t backingReadLatencyNsTotal{0};
+  uint64_t backingWriteLatencyNsTotal{0};
+  uint64_t physicalIatNsTotal{0};
+
   util::PercentileStats *backingReadSizeBytePercentile = new util::PercentileStats();
   util::PercentileStats *backingWriteSizeBytePercentile = new util::PercentileStats();
 
   util::PercentileStats *backingReadLatencyNsPercentile = new util::PercentileStats();
   util::PercentileStats *backingWriteLatencyNsPercentile = new util::PercentileStats();
 
+  util::PercentileStats *blockReadSizeBytePercentile = new util::PercentileStats();
+  util::PercentileStats *blockWriteSizeBytePercentile = new util::PercentileStats();
+
   util::PercentileStats *readLatencyNsPercentile = new util::PercentileStats();
   util::PercentileStats *writeLatencyNsPercentile = new util::PercentileStats();
+
   util::PercentileStats *physicalIatNsPercentile = new util::PercentileStats();
 
 
-  void render(std::ostream& out, folly::StringPiece delimiter) const;
+  void render(std::ostream& out, folly::StringPiece delimiter, bool renderPercentileFlag) const;
   void renderPercentile(std::ostream& out, 
                         folly::StringPiece describe, 
                         folly::StringPiece unit, 
@@ -132,7 +145,7 @@ class BlockSystemStressor {
   // wait until the stress run finishes
   virtual void finish() = 0;
 
-  virtual void statSnapshot(uint64_t threadId, std::ostream& ofs, std::string separator) = 0;
+  virtual void statSnapshot(uint64_t threadId, std::ostream& ofs, std::string separator, bool renderPStats) = 0;
 
   virtual BlockReplayStats getStat(uint64_t threadId) const = 0;
 
