@@ -87,15 +87,15 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter, b
     renderPercentile(out, "blockReadLatency", "ns", delimiter, readLatencyNsPercentile);
     renderPercentile(out, "blockWriteLatency", "ns", delimiter, writeLatencyNsPercentile);
   } else {
-    uint64_t meanBlockReadLatencyNs = readLatencyNsTotal/readBlockReqCount;
-    uint64_t meanBlockWriteLatencyNs = writeLatencyNsTotal/writeBlockReqCount;
-    uint64_t meanBackingReadLatencyNs = backingReadLatencyNsTotal/readBackingReqCount;
-    uint64_t meanBackingWriteLatencyNs = backingWriteLatencyNsTotal/writeBackingReqCount;
-    uint64_t meanBackingReadSize = readBackingReqByte/readBackingReqCount;
-    uint64_t meanBackingWriteSize = writeBackingReqByte/writeBackingReqCount;
-    uint64_t meanReadSize = readBlockReqByte/readBlockReqCount;
-    uint64_t meanWriteSize = writeBlockReqByte/writeBlockReqCount;
-    uint64_t meanIat = physicalIatNsTotal/blockReqCount;
+    uint64_t meanBlockReadLatencyNs = readLatencyNsTotal/readBlockReqCount ? readBlockReqCount > 0 : 0;
+    uint64_t meanBlockWriteLatencyNs = writeLatencyNsTotal/writeBlockReqCount ? writeBlockReqCount > 0 : 0;
+    uint64_t meanBackingReadLatencyNs = backingReadLatencyNsTotal/readBackingReqCount ? readBackingReqCount > 0 : 0;
+    uint64_t meanBackingWriteLatencyNs = backingWriteLatencyNsTotal/writeBackingReqCount ? writeBackingReqCount > 0 : 0;
+    uint64_t meanBackingReadSize = readBackingReqByte/readBackingReqCount ? readBackingReqCount > 0 : 0;
+    uint64_t meanBackingWriteSize = writeBackingReqByte/writeBackingReqCount ? writeBackingReqCount > 0 : 0;
+    uint64_t meanReadSize = readBlockReqByte/readBlockReqCount ? readBlockReqCount > 0 : 0;
+    uint64_t meanWriteSize = writeBlockReqByte/writeBlockReqCount ? writeBlockReqCount > 0 : 0;
+    uint64_t meanIat = physicalIatNsTotal/blockReqCount ? blockReqCount > 0 : 0;
 
     out << folly::sformat("backingReadSize_avg_byte={}{}", meanBackingReadSize, delimiter);
     out << folly::sformat("backingWriteSize_avg_byte={}{}", meanBackingWriteSize, delimiter);

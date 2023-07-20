@@ -78,7 +78,7 @@ const Request& BlockReplayGenerator::getReq(uint8_t fileIndex, std::mt19937_64&,
 
     // Timestamp 
     std::getline(row_stream, token, ',');
-    uint64_t ts = std::stoul(token);
+    uint64_t ts = uint64_t (std::stoul(token)/config_.blockReplayConfig.replayRate);
     lastTsVec_.at(fileIndex) = ts;
 
     // LBA

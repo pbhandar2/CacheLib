@@ -131,6 +131,7 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             ofs << folly::sformat("pendingBlockReqCount={}{}", pendingBlockReqCount_, separator);
             ofs << folly::sformat("queueSize={}{}", queueSize_, separator);
+            ofs << folly::sformat("totalIdleTime={}{}", totalTimeIdleNs_, separator);
             ofs << "\n";
         }
 
@@ -343,6 +344,8 @@ class BatchBlockStressor : public BlockSystemStressor {
                 updateBlockReqStats(blockReqIndex, reqThreadId);
                 pendingBlockReqVec_.at(blockReqIndex).reset();
                 pendingBlockReqCount_--;
+                if (pendingBlockReqCount_ == 0)
+                    idleTimeStartTs_ = getPhysicalTimeElapsedNs();
             }
             
             updateBackingStoreStats(backingIo, reqThreadId);
@@ -682,6 +685,12 @@ class BatchBlockStressor : public BlockSystemStressor {
 
     void increasePendingBlockReqCount(uint64_t value) {
         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+        if (pendingBlockReqCount_ == 0) {
+            uint64_t currentPhysicalTs = getPhysicalTimeElapsedNs();
+            if (idleTimeStartTs_ > 0) 
+                totalTimeIdleNs_ += (currentPhysicalTs - idleTimeStartTs_);
+            idleTimeStartTs_ = currentPhysicalTs;
+        }
         pendingBlockReqCount_ += value; 
         pendingBlockReqCountPStats_->trackValue(pendingBlockReqCount_);
     }
@@ -831,6 +840,10 @@ class BatchBlockStressor : public BlockSystemStressor {
     uint64_t traceBeginTimestampUs_;
     uint64_t prevSubmitCycleCount_;
     uint64_t physicalStartTimeNs_;
+
+    // track idle time of system 
+    uint64_t totalTimeIdleNs_ = 0;
+    uint64_t idleTimeStartTs_ = 0;
 
 };
 
