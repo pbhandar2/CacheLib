@@ -80,6 +80,7 @@ void BlockReplayStats::render(std::ostream& out, folly::StringPiece delimiter, b
     renderPercentile(out, "backingReadSize", "byte", delimiter, backingReadSizeBytePercentile);
     renderPercentile(out, "backingWriteSize", "byte", delimiter, backingWriteSizeBytePercentile);
     renderPercentile(out, "physicalIat", "ns", delimiter, physicalIatNsPercentile);
+    renderPercentile(out, "percentErrorIat", "ns", delimiter, percentIatErrorPstat);
     renderPercentile(out, "backingReadLatency", "ns", delimiter, backingReadLatencyNsPercentile);
     renderPercentile(out, "backingWriteLatency", "ns", delimiter, backingWriteLatencyNsPercentile);
     renderPercentile(out, "blockReadSize", "byte", delimiter, blockReadSizeBytePercentile);

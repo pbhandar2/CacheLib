@@ -10,49 +10,63 @@ namespace cachebench {
 class BlockRequest {
     public:
 
-        BlockRequest(uint64_t lbaSizeByte, uint64_t blockSizeByte){
+        BlockRequest(uint64_t lbaSizeByte, 
+                        uint64_t blockSizeByte){
+            /*A constructor that requires only LBA and block size.*/
             lbaSizeByte_ = lbaSizeByte;
             blockSizeByte_ = blockSizeByte;
         }
 
 
-        BlockRequest(uint64_t lbaSizeByte, 
+        BlockRequest(uint64_t threadId,
+                        uint64_t blockRequestId,
+                        uint64_t lbaSizeByte, 
                         uint64_t blockSizeByte,
-                        uint64_t physicalTs, // timestamp of when request was read 
-                        uint64_t traceTs, 
-                        uint64_t iat, 
+                        uint64_t physicalTimestampNs, // physical timestamp of when read request was read 
+                        uint64_t physicalIatNs, // physical IAT of block request
+                        uint64_t traceTimestampUs, // timestamp in the block trace 
+                        uint64_t traceIatUs, // IAT according to block trace 
                         uint64_t lba, 
                         uint64_t size, 
-                        bool writeFlag, 
-                        uint64_t blockRequestIndex, 
-                        uint64_t threadId){
+                        bool writeFlag){
+            //A constructor for BlockRequest that takes all the parameters of block request at once.
             lbaSizeByte_ = lbaSizeByte;
             blockSizeByte_ = blockSizeByte;
-            load(physicalTs, traceTs, iat, lba, size, writeFlag, blockRequestIndex, threadId);
+            load(threadId,
+                    blockRequestId,
+                    physicalTimestampNs,
+                    physicalIatNs,
+                    traceTimestampUs,
+                    traceIatUs,
+                    lba,
+                    size,
+                    writeFlag);
         }
 
 
-        void load(uint64_t physicalTs, 
-                    uint64_t ts, 
-                    uint64_t iat, 
+        void load(uint64_t threadId,
+                    uint64_t blockRequestId,
+                    uint64_t physicalTimestampNs, 
+                    uint64_t physicalIatNs,
+                    uint64_t traceTimestampUs, 
+                    uint64_t traceIatUs, 
                     uint64_t lba, 
                     uint64_t size, 
-                    bool writeFlag, 
-                    uint64_t blockRequestIndex, 
-                    uint64_t threadId) {
-            
+                    bool writeFlag) {
+            // Load the specified block request properties to this object.
             if (size_ > 0)
                 throw std::runtime_error(folly::sformat("Loading a block request which is already loaded \n"));
 
-            physicalTs_ = physicalTs;
-            traceTs_ = ts; 
+            threadId_ = threadId;
+            blockRequestId_ = blockRequestId;
+            physicalTimestampNs_ = physicalTimestampNs;
+            physicalIatNs_ = physicalIatNs; 
+            traceTimestampUs_ = traceTimestampUs; 
+            traceIatUs_ = traceIatUs;
             lba_ = lba;
             size_ = size;
             writeFlag_ = writeFlag;
-            blockRequestIndex_ = blockRequestIndex;
-            threadId_ = threadId;
-            iatUs_ = iat; 
-
+            
             offsetByte_ = lba_ * lbaSizeByte_;
             startBlock_ = floor(offsetByte_/blockSizeByte_);
             endBlock_ = floor((offsetByte_ + size_ - 1)/blockSizeByte_);
@@ -74,27 +88,27 @@ class BlockRequest {
             if (blockIoCompletionVec_.size() == 0)
                 throw std::runtime_error("The blockIoCompletionVec is 0 \n");
             
-            // if there is no misalignment, then mark the misalignment as done 
-            // sometimes the front and rear misalignment are on the same page 
-            // for now submitting separate IO for each 
+            // if there is no front misalignment then mark it done. 
             if ((frontMisalignByte_ == 0) & (writeFlag_))
                 blockIoCompletionVec_.at(0) = true; 
 
+            // if there is no rear misalignment then mark it done. 
             if ((rearMisalignByte_ == 0) & (writeFlag_))
                 blockIoCompletionVec_.at(2) = true; 
         }
 
 
         bool isLoaded() {
+            // Check if a block request is loaded to this object.
             return size_ > 0;
         }
 
 
         void reset() {
+            // Reset this object to empty.
             if (size_ == 0)
-                throw std::runtime_error(folly::sformat("Reseting a empty block request {}\n", blockRequestIndex_));
+                throw std::runtime_error(folly::sformat("Reseting a empty block request {}\n", blockRequestId_));
             
-            blockRequestIndex_ = 0;
             size_ = 0;
             blockHitCount_ = 0;
             readHitByte_ = 0; 
@@ -102,18 +116,21 @@ class BlockRequest {
         }
 
 
-        uint64_t getPhysicalTs() {
-            return physicalTs_;
+        uint64_t getPhysicalTimestampNs() {
+            // Get the physical timestamp in nanoseconds.
+            return physicalTimestampNs_;
         }
 
 
-        uint64_t getTs() {
-            return traceTs_;
+        uint64_t getTraceTimestampUs() {
+            // Get the trace timestamp in microseconds.
+            return traceTimestampUs_;
         }
 
-
-        uint64_t getIatUs() {
-            return iatUs_;
+        
+        uint64_t getTraceIatUs() {
+            // Get the trace inter-arrival time of a block request.
+            return traceIatUs_;
         }
 
 
@@ -137,8 +154,12 @@ class BlockRequest {
         }
 
 
-        uint64_t getBlockRequestIndex() {
-            return blockRequestIndex_;
+        uint64_t getblockRequestId() {
+            return blockRequestId_;
+        }
+
+        uint64_t getPhysicalIatNs() {
+            return physicalIatNs_;
         }
 
 
@@ -147,7 +168,7 @@ class BlockRequest {
         }
 
 
-        uint64_t getStartBlock() {
+        uint64_t getStartBlockId() {
             return startBlock_;
         }
 
@@ -162,7 +183,7 @@ class BlockRequest {
         }
 
 
-        uint64_t getEndBlock() {
+        uint64_t getEndBlockId() {
             return endBlock_;
         }
 
@@ -184,6 +205,11 @@ class BlockRequest {
 
         void setIatUs(uint64_t iatUs) {
             iatUs_ = iatUs; 
+        }
+
+
+        void setTraceIatUs(uint64_t iatUs) {
+            traceIatUs_ = iatUs; 
         }
 
 
@@ -274,17 +300,19 @@ class BlockRequest {
     // block request attributes 
     bool writeFlag_;
     uint64_t iatUs_;
-    uint64_t traceTs_;
-    uint64_t physicalTs_;
+    uint64_t traceTimestampUs_;
+    uint64_t physicalTimestampNs_;
+    uint64_t physicalIatNs_;
     uint64_t size_ = 0;
     uint64_t threadId_;
+    uint64_t traceIatUs_;
     uint64_t lba_;
     uint64_t offsetByte_;
     uint64_t startBlock_;
     uint64_t endBlock_;
     uint64_t frontMisalignByte_;
     uint64_t rearMisalignByte_;
-    uint64_t blockRequestIndex_;
+    uint64_t blockRequestId_;
     
     // cache hit and completion stats 
     uint64_t blockHitCount_ = 0;

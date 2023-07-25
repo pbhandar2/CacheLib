@@ -81,7 +81,7 @@ struct BlockReplayStats {
   util::PercentileStats *writeLatencyNsPercentile = new util::PercentileStats();
 
   util::PercentileStats *physicalIatNsPercentile = new util::PercentileStats();
-
+  util::PercentileStats *percentIatErrorPstat = new util::PercentileStats();
 
   void render(std::ostream& out, folly::StringPiece delimiter, bool renderPercentileFlag) const;
   void renderPercentile(std::ostream& out, 
