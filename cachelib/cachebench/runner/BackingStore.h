@@ -243,7 +243,6 @@ class BackingStore {
 
                 }
             }
-            std::cout << folly::sformat("Track completed IO terminated\n");
         }
 
 

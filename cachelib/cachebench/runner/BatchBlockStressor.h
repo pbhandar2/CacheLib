@@ -717,12 +717,18 @@ class BatchBlockStressor : public BlockSystemStressor {
         Return:
             physicalTimeElapsedNs: The physical time elapsed in nanoseconds. 
         */
-        std::lock_guard<std::mutex> l(timeMutex_);
         uint64_t currentTimeElapsedNs = tscns_.tsc2ns(tscns_.rdtsc());
-        if (currentTimeElapsedNs <= physicalStartTimestampNs_) {
+        uint64_t physicalStartTimestampNs = getPhysicalStartTimestampNs();
+        if (currentTimeElapsedNs <= physicalStartTimestampNs) {
             return 0;
         } else 
-            return currentTimeElapsedNs - physicalStartTimestampNs_;
+            return currentTimeElapsedNs - physicalStartTimestampNs;
+    }
+
+
+    uint64_t getPhysicalStartTimestampNs() {
+        std::lock_guard<std::mutex> l(timeMutex_);
+        return physicalStartTimestampNs_;
     }
 
 
@@ -861,10 +867,11 @@ class BatchBlockStressor : public BlockSystemStressor {
 
         BlockRequest nextBlockReq = loadBlockReqBatch(threadId);
         while(nextBlockReq.isLoaded()) {
-            // Sync the physical time to the trace time to simulate the IAT of block request to the closest accuracy.
+            // Sync the time in the trace and the physical time. 
             if (config_.blockReplayConfig.globalClock) {
                 uint64_t traceTimeElapsedUs = curBlockReqBatchVec_.at(threadId).front().getTraceTimestampUs() - traceBeginTimestampUs_;
-                while (traceTimeElapsedUs*1000 > getPhysicalTimeElapsedNs());
+                uint64_t physicalStartTimestampNs = getPhysicalStartTimestampNs();
+                while (traceTimeElapsedUs*1000 > (getCurrentTimestampNs() - physicalStartTimestampNs));
             } else {
                 uint64_t prevSubmitTimestampNs = getPrevSubmitTimestamp();
                 while (curBlockReqBatchVec_.at(threadId).front().getTraceIatUs()*1000 > (getCurrentTimestampNs()-prevSubmitTimestampNs));
