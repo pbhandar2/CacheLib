@@ -39,6 +39,7 @@ BlockReplayConfig::BlockReplayConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, statTrackIntervalSec);
   JSONSetVal(configJson, minOffset);
   JSONSetVal(configJson, replayRate);
+  JSONSetVal(configJson, statOutputDir);
   checkCorrectSize<BlockReplayConfig, 160>();
 }
 
