@@ -35,7 +35,7 @@ struct BlockReplayConfig : public JSONConfig {
   std::vector<std::uint64_t> minLbaVec{};
   std::vector<std::string> backingFiles{};
 
-  std::string statOutputDir{"/dev/shm"};
+  std::string statOutputDir{"/run/replay"};
 
   uint32_t lbaSizeByte{512};
   uint32_t blockSizeByte{4096};
