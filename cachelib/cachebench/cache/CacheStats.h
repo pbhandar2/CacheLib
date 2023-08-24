@@ -121,6 +121,7 @@ struct Stats {
 
   void renderBlockReplay(std::ostream& out, std::string separator, bool printPercentiles) const {
     out << folly::sformat("numItems={}{}", numItems, separator);
+    out << folly::sformat("numNvmGetMiss={}{}", numNvmGetMiss, separator);
     out << folly::sformat("numNvmItems={}{}", numNvmItems, separator);
     out << folly::sformat("allocAttempts={}{}", allocAttempts, separator);
     out << folly::sformat("evictAttempts={}{}", evictAttempts, separator);
