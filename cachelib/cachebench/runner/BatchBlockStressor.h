@@ -598,7 +598,7 @@ class BatchBlockStressor : public BlockSystemStressor {
         }
 
         if (rearMisalignByte > 0) {
-            if (blockInCache(startBlockId, threadId)) {
+            if (blockInCache(endBlockId, threadId)) {
                 {
                     std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
                     pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
