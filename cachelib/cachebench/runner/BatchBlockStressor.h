@@ -588,20 +588,32 @@ class BatchBlockStressor : public BlockSystemStressor {
         uint64_t frontMisalignByte = req.getFrontMisAlignByte();
         uint64_t rearMisalignByte = req.getRearMisAlignByte();
 
-        if (frontMisalignByte > 0) {
-            if (blockInCache(startBlockId, threadId)) {
-                {
-                    std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                    pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0, true);
+        if (startBlockId == endBlockId) {
+            if ((frontMisalignByte > 0) || (rearMisalignByte > 0)) {
+                if (blockInCache(startBlockId, threadId)) {
+                    {
+                        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0, true);
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
+                    }
                 }
             }
-        }
+        } else {
+            if (frontMisalignByte > 0) {
+                if (blockInCache(startBlockId, threadId)) {
+                    {
+                        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0, true);
+                    }
+                }
+            }
 
-        if (rearMisalignByte > 0) {
-            if (blockInCache(endBlockId, threadId)) {
-                {
-                    std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
-                    pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
+            if (rearMisalignByte > 0) {
+                if (blockInCache(endBlockId, threadId)) {
+                    {
+                        std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
+                        pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
+                    }
                 }
             }
         }
