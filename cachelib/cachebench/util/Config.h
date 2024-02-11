@@ -55,7 +55,11 @@ struct BlockReplayConfig : public JSONConfig {
   // the timestamps are divided by the replayRate to replay an accelerated workload 
   uint32_t replayRate{1};
 
+  // if IAT is less than the value of minIatUs then the requests are batched together
   uint32_t minIatUs{10};
+
+  // wait time after queue is empty for trace acceleration
+  uint32_t waitAfterEmptyQueueUs{100};
 
   // whether to sync the replay time with timestamps on the trace 
   // when TRUE:

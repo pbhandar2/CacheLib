@@ -9,12 +9,14 @@
         "generator": "block-replay",
         "numThreads": 1,
         "blockReplayConfig": {
-            "traces": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/base_a.csv"],
-            "backingFiles": ["/users/pbhandar/disk/CacheLib/cachelib/cachebench/test_configs/block_replay/traces/disk.file"],
+            "traces": ["./traces/base_a.csv"],
+            "backingFiles": ["./traces/disk.file"],
             "globalClock": false,
+            "statOutputDir": "/tmp/replay",
             "blockRequestProcesserThreads": 4,
             "asyncIOReturnTrackerThreads": 4,
-            "minSleepTimeUs": 5,
+            "minSleepTimeUs": 10,
+            "waitAfterEmptyQueueUs": 1000,
             "maxPendingBlockRequestCount": 128,
             "replayRate": 1
         }

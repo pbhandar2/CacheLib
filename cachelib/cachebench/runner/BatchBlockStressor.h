@@ -591,29 +591,38 @@ class BatchBlockStressor : public BlockSystemStressor {
         if (startBlockId == endBlockId) {
             if ((frontMisalignByte > 0) || (rearMisalignByte > 0)) {
                 if (blockInCache(startBlockId, threadId)) {
+                    // std::cout << folly::sformat("Cache hit for block {} \n", startBlockId);
                     {
                         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
                         pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0, true);
                         pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
                     }
+                } else {
+                    // std::cout << folly::sformat("Cache miss for block {} \n", startBlockId);
                 }
             }
         } else {
             if (frontMisalignByte > 0) {
                 if (blockInCache(startBlockId, threadId)) {
                     {
+                        // std::cout << folly::sformat("Cache hit for block {} \n", startBlockId);
                         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
                         pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(0, true);
                     }
+                } else {
+                    // std::cout << folly::sformat("Cache miss for block {} \n", startBlockId);
                 }
             }
 
             if (rearMisalignByte > 0) {
                 if (blockInCache(endBlockId, threadId)) {
                     {
+                        // std::cout << folly::sformat("Cache hit for block {} \n", endBlockId);
                         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
                         pendingBlockReqVec_.at(blockRequestIndex).setCacheHit(2, true);
                     }
+                } else {
+                    // std::cout << folly::sformat("Cache miss for block {} \n", endBlockId);
                 }
             }
         }
@@ -648,8 +657,12 @@ class BatchBlockStressor : public BlockSystemStressor {
 
         std::lock_guard<std::mutex> l(pendingBlockReqMutex_);
         for (int curBlock = startBlockId; curBlock<=endBlockId; curBlock++) {
-            if (blockInCache(curBlock, threadId)) 
+            if (blockInCache(curBlock, threadId)) {
+                // std::cout << folly::sformat("Cache hit for block {} \n", curBlock);
                 pendingBlockReqVec_.at(blockReqId).setCacheHit(curBlock - startBlockId, true);
+            } else{
+                // std::cout << folly::sformat("Cache miss for block {} \n", curBlock);
+            }
         }
 
         // if all the blocks are in cache, the block request is complete 
@@ -694,16 +707,16 @@ class BatchBlockStressor : public BlockSystemStressor {
         request is only assigned an ID once it is picked up for processing. The physical IAT of 
         the block request is computed on submission time so setting it to 0 for now.*/
         BlockRequest blockReq = BlockRequest(threadId,
-            maxPendingBlockRequestCount_, 
-            lbaSizeByte_, 
-            blockSizeByte_,
-            getCurrentTimestampNs(),
-            0,
-            ts,
-            iatUs,
-            lba,
-            size,
-            writeFlag);
+                                                maxPendingBlockRequestCount_, 
+                                                lbaSizeByte_, 
+                                                blockSizeByte_,
+                                                getCurrentTimestampNs(),
+                                                0,
+                                                ts,
+                                                iatUs,
+                                                lba,
+                                                size,
+                                                writeFlag);
         return blockReq;
     }
 
@@ -848,8 +861,8 @@ class BatchBlockStressor : public BlockSystemStressor {
 
             if (nextBlockReq.getTraceTimestampUs() < prevBlockReqTimestamp)
                 throw std::runtime_error("The timestamp of the next block request is lower than the current request.");
-            
-            if (nextBlockReqIatUs < config_.blockReplayConfig.minIatUs) {
+
+            while (nextBlockReqIatUs < config_.blockReplayConfig.minIatUs) {
                 curBlockReqBatchVec_.at(threadId).push_back(nextBlockReq);
                 prevBlockReqTimestamp = curBlockReqBatchVec_.at(threadId).back().getTraceTimestampUs();
                 nextBlockReq = loadBlockReq(threadId, curBlockReqBatchVec_.at(threadId).back().getTraceTimestampUs());
@@ -867,6 +880,30 @@ class BatchBlockStressor : public BlockSystemStressor {
         std::cout << folly::sformat("INFO(threadId={}): {}", threadId, infoString);
     }
 
+    void replayIAT(uint64_t threadId) {
+            // Sync the time in the trace and the physical time. 
+            if (config_.blockReplayConfig.globalClock) {
+                uint64_t traceTimeElapsedUs = curBlockReqBatchVec_.at(threadId).front().getTraceTimestampUs() - traceBeginTimestampUs_;
+                uint64_t physicalStartTimestampNs = getPhysicalStartTimestampNs();
+                while (traceTimeElapsedUs*1000 > (getCurrentTimestampNs() - physicalStartTimestampNs));
+            } else {
+                uint64_t prevSubmitTimestampNs = getPrevSubmitTimestamp();
+                uint64_t queueEmptyStartTimestampNs = 0;
+                while (curBlockReqBatchVec_.at(threadId).front().getTraceIatUs()*1000 > (getCurrentTimestampNs()-prevSubmitTimestampNs)){
+                    if (queueSize_ == 0) {
+                        if (queueEmptyStartTimestampNs == 0) {
+                            queueEmptyStartTimestampNs = getCurrentTimestampNs();
+                        } else if ((getCurrentTimestampNs() - queueEmptyStartTimestampNs)*1000 > config_.blockReplayConfig.waitAfterEmptyQueueUs) {
+                            // std::cout << "Wait time too long moving on\n";
+                            break; 
+                        }
+                    } else {
+                        queueEmptyStartTimestampNs = 0; 
+                    }
+                }
+            }
+    }
+
 
     void replay(BlockReplayStats& stats, uint64_t threadId) {
         /* Replay a block storage trace. 
@@ -878,16 +915,10 @@ class BatchBlockStressor : public BlockSystemStressor {
         logInfo(folly::sformat("Init block trace replay.\n"), threadId);
 
         BlockRequest nextBlockReq = loadBlockReqBatch(threadId);
+
         while(nextBlockReq.isLoaded()) {
             // Sync the time in the trace and the physical time. 
-            if (config_.blockReplayConfig.globalClock) {
-                uint64_t traceTimeElapsedUs = curBlockReqBatchVec_.at(threadId).front().getTraceTimestampUs() - traceBeginTimestampUs_;
-                uint64_t physicalStartTimestampNs = getPhysicalStartTimestampNs();
-                while (traceTimeElapsedUs*1000 > (getCurrentTimestampNs() - physicalStartTimestampNs));
-            } else {
-                uint64_t prevSubmitTimestampNs = getPrevSubmitTimestamp();
-                while (curBlockReqBatchVec_.at(threadId).front().getTraceIatUs()*1000 > (getCurrentTimestampNs()-prevSubmitTimestampNs));
-            }
+            replayIAT(threadId);
             submitBlockReqBatch(threadId);
             updateSystemStats(threadId);
             curBlockReqBatchVec_.at(threadId).clear();

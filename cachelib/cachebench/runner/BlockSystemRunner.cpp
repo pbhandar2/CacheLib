@@ -16,7 +16,6 @@ BlockSystemRunner::BlockSystemRunner(const CacheBenchConfig& config)
 bool BlockSystemRunner::run() {
     stressor_->start();
     stressor_->finish();
-
     BlockReplayStats stats;
     uint64_t numThreads = stressorConfig_.numThreads;
     for (uint64_t threadId = 0; threadId < numThreads; threadId++) {
