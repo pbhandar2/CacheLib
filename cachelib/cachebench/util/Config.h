@@ -69,7 +69,7 @@ struct BlockReplayConfig : public JSONConfig {
   //  the IAT of each block request is followed even if the replay time is ahead of trace time 
   bool globalClock{true};
 
-  uint64_t statTrackIntervalSec{30};
+  uint64_t statTrackIntervalSec{300};
 
   uint64_t minOffset{0};
 };
