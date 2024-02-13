@@ -15,6 +15,16 @@ mechanism. CacheLib provides a thread safe API to build high throughput,
 low overhead caching services, with built-in ability to leverage
 DRAM and SSD caching transparently.
 
+## Fork Addition 
+
+This is a fork of CacheLib that includes a block storage system
+stressor which is located at [BatchBlockStressor.h](https://github.com/pbhandar2/CacheLib/blob/active/cachelib/cachebench/runner/BatchBlockStressor.h).
+A [sample configuration](https://github.com/pbhandar2/CacheLib/blob/active/cachelib/cachebench/test_configs/block_replay/sample_config.json) is included
+to run a simple block storage stressor. 
+
+Command to run block storage stressor:
+
+./opt/cachelib/bin/cachebench --json_test_config ./opt/cachelib/bin/cachebench --json_test_config cachelib/cachebench/test_configs/block_replay/sample_config.json 
 
 ## Performance benchmarking
 
