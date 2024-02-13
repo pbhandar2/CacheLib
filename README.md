@@ -23,6 +23,7 @@ A [sample configuration](https://github.com/pbhandar2/CacheLib/blob/active/cache
 to run a simple block storage stressor. 
 
 Command to run block storage stressor:
+
 ./opt/cachelib/bin/cachebench --json_test_config ./opt/cachelib/bin/cachebench --json_test_config cachelib/cachebench/test_configs/block_replay/sample_config.json 
 
 ## Performance benchmarking
