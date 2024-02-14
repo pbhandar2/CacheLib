@@ -47,8 +47,8 @@ def run_trace_replay(replay_config: dict, args):
 
     print(run_cmd, stdout_path, stderr_path, usage_path, power_path)
 
-    # runner = Runner()
-    # runner.run(run_cmd, stdout_path, stderr_path, usage_path, power_path)
+    runner = Runner()
+    runner.run(run_cmd, stdout_path, stderr_path, usage_path, power_path)
 
 
 def start_next_experiment(args):
