@@ -1,11 +1,11 @@
 {
     "cache_config": {
         "lruUpdateOnWrite": true,
-        "cacheSizeMB": 110000,
+        "cacheSizeMB": 200,
         "allocSizes": [
             4136
         ],
-        "nvmCacheSizeMB": 420000,
+        "nvmCacheSizeMB": 400,
         "nvmCachePaths": [
             "/users/pbhandar/nvm/disk.file"
         ],

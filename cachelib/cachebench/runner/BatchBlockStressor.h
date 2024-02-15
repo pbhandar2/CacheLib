@@ -85,11 +85,11 @@ class BatchBlockStressor : public BlockSystemStressor {
                 }
 
                 // stats tracker threads
-                for (uint64_t i = 0; i < config_.numThreads; ++i) {
-                    workers.push_back(std::thread([this, index=i]() {
-                        statTracker(index);
-                    }));
-                }
+                // for (uint64_t i = 0; i < config_.numThreads; ++i) {
+                //     workers.push_back(std::thread([this, index=i]() {
+                //         statTracker(index);
+                //     }));
+                // }
 
                 for (auto& worker : workers) {
                     worker.join();
@@ -173,15 +173,19 @@ class BatchBlockStressor : public BlockSystemStressor {
         if (writeFlag) {
             statsVec_.at(threadId).writeBackingReqCount++;
             statsVec_.at(threadId).writeBackingReqByte += size; 
-            statsVec_.at(threadId).backingWriteLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
+
+            uint64_t writeLatencyNs = getCurrentTsNs() - physicalTs;
+            statsVec_.at(threadId).backingWriteLatencyNsPercentile->trackValue(writeLatencyNs);
             statsVec_.at(threadId).backingWriteSizeBytePercentile->trackValue(size);
-            statsVec_.at(threadId).backingWriteLatencyNsTotal += (getCurrentTsNs() - physicalTs);
+            statsVec_.at(threadId).backingWriteLatencyNsTotal += writeLatencyNs;
         } else {
             statsVec_.at(threadId).readBackingReqCount++;
             statsVec_.at(threadId).readBackingReqByte += size; 
-            statsVec_.at(threadId).backingReadLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
+
+            uint64_t readLatencyNs = getCurrentTsNs() - physicalTs;
+            statsVec_.at(threadId).backingReadLatencyNsPercentile->trackValue(readLatencyNs);
             statsVec_.at(threadId).backingReadSizeBytePercentile->trackValue(size);
-            statsVec_.at(threadId).backingReadLatencyNsTotal += (getCurrentTsNs() - physicalTs);
+            statsVec_.at(threadId).backingReadLatencyNsTotal += readLatencyNs;
         }
 
         statsVec_.at(threadId).backingReqAddAttempt = backingStore_.getBackingReqAddAttempt();
@@ -234,17 +238,21 @@ class BatchBlockStressor : public BlockSystemStressor {
                 if ((frontMisalignByte > 0) || (rearMisalignByte > 0))
                     statsVec_.at(threadId).readCacheReqCount++;
             }
-            statsVec_.at(threadId).writeLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
+
+            uint64_t writeLatencyNs = getCurrentTsNs() - physicalTs;
+            statsVec_.at(threadId).writeLatencyNsPercentile->trackValue(writeLatencyNs);
             statsVec_.at(threadId).blockWriteSizeBytePercentile->trackValue(size);
-            statsVec_.at(threadId).writeLatencyNsTotal += (getCurrentTsNs() - physicalTs);
+            statsVec_.at(threadId).writeLatencyNsTotal += writeLatencyNs;
         } else {
             statsVec_.at(threadId).readBlockReqCount++;
             statsVec_.at(threadId).readBlockReqByte += size;
             statsVec_.at(threadId).readMisalignByte += (frontMisalignByte + rearMisalignByte);
             statsVec_.at(threadId).readCacheReqCount += blockCount; 
-            statsVec_.at(threadId).readLatencyNsPercentile->trackValue(getCurrentTsNs() - physicalTs);
+
+            uint64_t readLatencyNs = getCurrentTsNs() - physicalTs;
+            statsVec_.at(threadId).readLatencyNsPercentile->trackValue(readLatencyNs);
             statsVec_.at(threadId).blockReadSizeBytePercentile->trackValue(size);
-            statsVec_.at(threadId).readLatencyNsTotal += (getCurrentTsNs() - physicalTs);
+            statsVec_.at(threadId).readLatencyNsTotal += readLatencyNs;
         }
 
         statsVec_.at(threadId).readHitCount += pendingBlockReqVec_.at(blockReqIndex).getBlockHitCount();

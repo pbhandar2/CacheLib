@@ -24,7 +24,8 @@ def create_replay_config(args):
 
     kwargs = {}
     if args.t2Size > 0:
-        pass 
+        kwargs["nvmCacheSizeMB"] = args.t2Size
+        kwargs["nvmCachePaths"] = [args.nvmFilePath]
     
     kwargs["statOutputDir"] = str(args.statOutDir.absolute())
     replay_config = ReplayConfig(traces, backing_files, t1_size_mb, **kwargs)
@@ -154,14 +155,6 @@ def main():
 
     while start_next_experiment(args):
         pass 
-
-
-
-    # # if trace does not exist, create s3 key and download the trace 
-    # assert Path(args.tracePath).exists() and Path(args.backingFilePath).exists() 
-
-    # replay_config = create_replay_config(args)
-    # run_trace_replay(replay_config, args)
 
 
 if __name__ == "__main__":
